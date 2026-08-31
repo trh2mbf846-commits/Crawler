@@ -8,26 +8,35 @@ Dieses Verzeichnis ist ein eigenständiges Projekt innerhalb dieses Repositories
 **nichts mit dem Brettspiel-Begleit-Projekt im Repository-Root zu tun** (siehe README dort) -
 beide Projekte teilen sich lediglich den Git-Verlauf.
 
-## Wichtiger Hinweis zum aktuellen Stand
+## Aktueller Stand (Update 31.08.2026, nach Freischaltung des Netzzugriffs)
 
-Diese Cloud-Entwicklungsumgebung hatte während der Implementierung **keinen ausgehenden
-Internetzugriff** (Egress-Proxy blockiert alle externen Domains außer wenigen
-Infrastruktur-Diensten). Dadurch konnten die 3 vom Auftraggeber vorgegebenen Portale
-(Vergabeplattform Berlin, DB Bieterportal, ITDZ Berlin) **nicht live analysiert oder getestet
-werden** - siehe die Rückfrage dazu im Chat vom 31.08.2026 sowie `docs/portal-notes.md`.
+Netzzugriff für diese Session wurde am 31.08.2026 freigeschaltet (zuvor blockierte der
+Egress-Proxy jeglichen allgemeinen Internetzugriff, siehe Rückfrage im Chat). Daraufhin
+wurden alle 3 Pflicht-Portale real analysiert und die Connectoren gegen die tatsächliche
+Seitenstruktur gebaut und per `python -m app.run_all_connectors` getestet:
 
-**Was trotzdem vollständig steht und mit Test-/Demo-Daten nachweislich funktioniert:**
-Datenmodell, komplette 8-Agenten-Kette (Connector → Discovery → Analysis → Normalization →
-Duplicate → AI Classification → Search → Source Health), Job-/Eskalations-System,
-Ranking-Engine, Scheduler, REST-API und Frontend (Übersicht, Filter, Suche, Detailansicht,
-Suchprofile, Quellstatus-Dashboard, Entscheidungs-Posteingang). Ein End-to-End-Test
-(`backend/tests/test_pipeline_end_to_end.py`) belegt das mit einem Fake-Connector.
+- **ITDZ Berlin** ✅ läuft produktiv gegen die echte Seite (robots.txt erlaubt automatisierten
+  Zugriff ausdrücklich). Letzter Testlauf: 3 echte, aktuelle Ausschreibungen gefunden,
+  Quellstatus grün.
+- **Vergabeplattform Berlin** ✅ läuft produktiv gegen die echte Seite (keine robots.txt,
+  öffentliche Bekanntmachungssuche ohne Login, sogar Vergabeunterlagen frei zugänglich).
+  Letzter Testlauf: 137 echte, aktuelle Ausschreibungen über 3 Seiten gefunden, Quellstatus
+  grün.
+- **DB Bieterportal** ⚠️ Connector ist vollständig implementiert (Playwright, wie in Kapitel 3
+  vorgesehen), scheitert in dieser konkreten Sandbox-Umgebung aber an einer
+  Egress-Proxy-Einschränkung (WebSocket-Upgrades werden nicht unterstützt, die reine
+  JavaScript-SPA nutzt SignalR/WebSocket) - **kein Login/CAPTCHA auf dem Portal selbst**,
+  sondern eine Einschränkung dieser Session. Details, Diagnose und Empfehlung in
+  `docs/portal-notes.md`.
 
-**Was noch fehlt, sobald Netzzugriff verfügbar ist:** die 3 Connectoren sind lauffähige
-Gerüste mit klar markierten `# TODO(portal-analyse)`-Selektoren (plausible Annahmen, nicht
-verifiziert) - siehe `backend/app/agents/connector/`. Sobald echter Zugriff besteht: robots.txt/
-ToS prüfen (`docs/portal-notes.md`), Struktur analysieren, Selektoren anpassen,
-`python -m app.run_all_connectors` laufen lassen.
+Details zu robots.txt/ToS je Portal: `docs/portal-notes.md`.
+
+**Vollständig funktionierend (Tests + Live-Läufe):** Datenmodell, komplette 8-Agenten-Kette
+(Connector → Discovery → Analysis → Normalization → Duplicate → AI Classification → Search →
+Source Health), Job-/Eskalations-System, Ranking-Engine, Scheduler, REST-API und Frontend
+(Übersicht, Filter, Suche, Detailansicht, Suchprofile, Quellstatus-Dashboard,
+Entscheidungs-Posteingang). 22 automatisierte Tests plus ein realer Testlauf gegen 2 von 3
+Live-Portalen mit insgesamt 140 echten Ausschreibungen.
 
 ## Projektstruktur
 

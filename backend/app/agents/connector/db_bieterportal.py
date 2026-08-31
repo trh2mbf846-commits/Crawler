@@ -4,12 +4,20 @@ Kapitel 3: "Vermutlich stark JavaScript-basiert (Single-Page-Anwendung) - Headle
 Ansatz einplanen." Daher hier mit Playwright statt httpx umgesetzt. Selektoren sind - wie bei
 den anderen beiden Connectoren - bis zur echten Analyse (siehe base.py-Docstring) Platzhalter.
 
-Playwright benötigt installierte Browser-Binaries (`playwright install chromium`), was in
-dieser Netzwerk-blockierten Umgebung ebenfalls nicht möglich war. fetch_list_page/fetch_detail
-fangen einen fehlenden Browser sauber als TechnicalFailure ab, statt hart zu crashen.
+Verifiziert am 31.08.2026, nachdem Netzzugriff in dieser Session freigeschaltet wurde:
+ein einfacher HTTP-Abruf (siehe `polite_get`) liefert nur die leere SPA-Startseite (Angular +
+Telerik Kendo UI, SignalR/WebSocket-Datenkanal laut Bundle-Analyse) - Playwright ist also wie
+in Kapitel 3 vorgesehen nötig. In dieser konkreten Sandbox-Umgebung scheitert jede
+Chromium-Navigation zu genau diesem Host allerdings am Egress-Proxy (der die Verbindung als
+WebSocket-Upgrade behandelt und abbricht, siehe docs/portal-notes.md) - kein Login/CAPTCHA auf
+der Zielseite erkennbar, sondern eine Einschränkung dieser Session. fetch_list_page/
+fetch_detail fangen das sauber als TechnicalFailure ab, statt hart zu crashen; in einer
+Umgebung ohne diese Proxy-Einschränkung sollte der Connector funktionieren (Selektoren dann
+gegen die tatsächlich gerenderte Seite verifizieren, siehe TODOs unten).
 """
 from __future__ import annotations
 
+import os
 from urllib.parse import urljoin
 
 from app.agents.connector.base import BaseConnector, RawCandidate, RawDetail
@@ -39,15 +47,34 @@ class DbBieterportalConnector(BaseConnector):
                 "Playwright ist nicht installiert (pip install playwright && playwright install chromium)."
             ) from exc
 
+        # In dieser Entwicklungsumgebung ist unter /opt/pw-browsers ein vorinstallierter
+        # Chromium hinterlegt (siehe Systemhinweis), dessen Revision nicht zu der von der
+        # Python-Playwright-Version standardmäßig erwarteten Build-Nummer passt - deshalb
+        # expliziter Pfad statt Playwrights Auto-Erkennung. In einer anderen Umgebung (z. B.
+        # bei Vincent nach `playwright install chromium`) einfach die Umgebungsvariable
+        # `CRAWLER_PLAYWRIGHT_EXECUTABLE_PATH` leer lassen bzw. nicht setzen.
+        executable_path = os.environ.get("CRAWLER_PLAYWRIGHT_EXECUTABLE_PATH", "/opt/pw-browsers/chromium")
+        launch_kwargs = {"headless": True}
+        if executable_path and os.path.exists(executable_path):
+            launch_kwargs["executable_path"] = executable_path
+
+        https_proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
+        if https_proxy:
+            launch_kwargs["proxy"] = {"server": https_proxy}
+
         try:
             playwright = sync_playwright().start()
-            browser = playwright.chromium.launch(headless=True)
+            browser = playwright.chromium.launch(**launch_kwargs)
         except Exception as exc:  # Browser-Binary fehlt o.ä.
             raise TechnicalFailure(
                 f"Playwright-Browser konnte nicht gestartet werden ('playwright install chromium' nötig): {exc}"
             ) from exc
 
         context = browser.new_context(user_agent=self._user_agent())
+        # WebSocket-Upgrades werden von manchen Sandbox-Egress-Proxies nicht unterstützt
+        # (siehe docs/portal-notes.md) und können sonst die ganze Navigation per
+        # Connection-Reset abbrechen, obwohl die eigentlichen Seiteninhalte per HTTP laden.
+        context.route("**/*", lambda route, request: route.abort() if request.resource_type == "websocket" else route.continue_())
         return playwright, browser, context
 
     def _user_agent(self) -> str:
@@ -60,7 +87,11 @@ class DbBieterportalConnector(BaseConnector):
         try:
             self._respect_rate_limit()
             pw_page = context.new_page()
-            pw_page.goto(self.base_url, wait_until="networkidle", timeout=30000)
+            try:
+                pw_page.goto(self.base_url, wait_until="domcontentloaded", timeout=30000)
+            except Exception as exc:
+                raise TechnicalFailure(f"DB Bieterportal: Navigation fehlgeschlagen: {exc}") from exc
+            pw_page.wait_for_timeout(2000)
 
             html = pw_page.content()
             block = self._detect_block(html)
@@ -104,7 +135,11 @@ class DbBieterportalConnector(BaseConnector):
         try:
             self._respect_rate_limit()
             pw_page = context.new_page()
-            pw_page.goto(candidate.detail_url, wait_until="networkidle", timeout=30000)
+            try:
+                pw_page.goto(candidate.detail_url, wait_until="domcontentloaded", timeout=30000)
+            except Exception as exc:
+                raise TechnicalFailure(f"DB Bieterportal: Navigation zur Detailseite fehlgeschlagen: {exc}") from exc
+            pw_page.wait_for_timeout(2000)
 
             html = pw_page.content()
             block = self._detect_block(html)

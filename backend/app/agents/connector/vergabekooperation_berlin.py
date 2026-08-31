@@ -1,37 +1,46 @@
 """Connector: Vergabeplattform Berlin / Vergabekooperation Berlin (u. a. für die BVG).
 
-Kapitel 3: "Servlet-basiert, Cookie-/Session-Handling erforderlich." Die vom Auftraggeber
-genannte URL enthält bereits einen Hinweis auf einen Cookie-Consent-Schritt
-("LoginControllerServlet?function=CookiesCheckDone") - typisch für Vergabemanagement-Systeme,
-bei denen die ÖFFENTLICHE Bekanntmachungsliste ohne Bieterkonto einsehbar ist, aber ein
-Cookie-Consent-Redirect vorgeschaltet ist. Diese Annahme ist NICHT verifiziert (kein
-Netzzugriff, siehe base.py-Docstring).
+Verifiziert am 31.08.2026 gegen die echte Seite (Netzzugriff wurde in dieser Session
+freigeschaltet). Befund:
 
-Falls sich beim ersten echten Testlauf zeigt, dass hinter diesem Schritt tatsächlich ein
-Bieterkonto-Login liegt (nicht nur ein Cookie-Consent), ist das gemäß Abschnitt 9.2 eine echte
-Zugriffsschranke -> AccessBlocked/Eskalation, kein Umgehungsversuch.
+- Keine robots.txt vorhanden (404) -> keine per robots.txt kommunizierten Einschränkungen.
+  Die Nutzungsbedingungen (Teilnahmebedingungen) regeln ausschließlich die Teilnahme an
+  Vergabeverfahren (Angebotsabgabe) nach Registrierung; das bloße Einsehen veröffentlichter
+  Bekanntmachungen ist ausdrücklich ohne Registrierung möglich ("Anmelden" ist ein separater
+  Menüpunkt, keine Zugriffsschranke für die öffentliche Suche). Kein Hinweis auf ein Verbot
+  automatisierten Abrufs gefunden.
+- Der von Vincent vorgegebene Einstiegslink (`LoginControllerServlet?function=CookiesCheckDone`)
+  ist tatsächlich nur ein Cookie-Consent-Schritt, KEIN Bieter-Login - danach ist die
+  öffentliche Bekanntmachungssuche voll nutzbar (System: Administration Intelligence AG,
+  "NetServer"/AI Vergabemanager).
+- Die öffentliche Ausschreibungssuche liegt unter `PublicationSearchControllerServlet` mit
+  `Category=InvitationToTender` (server-seitig gerendertes HTML, Tabelle mit `data-oid` je
+  Zeile), Pagination über `&Start=0/50/100/...` (50 Treffer/Seite, reine GET-Links).
+- Die Detailseite wird clientseitig über eine kleine POST-Anfrage an `DataProvider`
+  (`param=Redirect&OID=<data-oid>&function=Detail&category=InvitationToTender`) aufgelöst,
+  liefert aber deterministisch immer `PublicationControllerServlet?function=Detail&TOID=<oid>
+  &Category=InvitationToTender` zurück - dieser Connector baut die URL daher direkt, ohne den
+  zusätzlichen POST-Roundtrip.
+- Detailseite ist vollständig öffentlich, inkl. Vergabeunterlagen ("Die Auftragsunterlagen
+  stehen für einen uneingeschränkten und vollständigen direkten Zugang gebührenfrei zur
+  Verfügung") - keine Zugriffsschranke im Sinne von Abschnitt 9.2 gefunden.
 """
 from __future__ import annotations
 
-from urllib.parse import urljoin
+import re
 
 from bs4 import BeautifulSoup
 
 from app.agents.connector.base import BaseConnector, RawCandidate, RawDetail
-from app.exceptions import AccessBlocked, TechnicalFailure
+from app.exceptions import TechnicalFailure
 
-BASE_URL = "https://vergabekooperation.berlin/"
-# Cookie-Consent-Einstieg lt. Auftraggeber-Vorgabe (Kapitel 3). NetServer-Systeme (z. B.
-# AI Vergabemanager / cosinex) bieten meist eine öffentliche Bekanntmachungssuche unter
-# einem Pfad wie NetServer/PublicationSearchControllerServlet - TODO(portal-analyse): echten
-# Pfad der öffentlichen Bekanntmachungsliste ermitteln.
-ENTRY_URL = "https://vergabekooperation.berlin/NetServer/LoginControllerServlet?function=CookiesCheckDone"
-LIST_URL_CANDIDATES = [
-    "https://vergabekooperation.berlin/NetServer/PublicationSearchControllerServlet",
-]
+BASE_URL = "https://vergabekooperation.berlin/NetServer/"
+ENTRY_URL = BASE_URL + "LoginControllerServlet?function=CookiesCheckDone"
+SEARCH_URL = BASE_URL + "PublicationSearchControllerServlet"
+DETAIL_URL = BASE_URL + "PublicationControllerServlet"
+PAGE_SIZE = 50
 
-LIST_ITEM_SELECTOR = "table.ergebnisliste tr, .bekanntmachung-item"
-LIST_TITLE_SELECTOR = "a"
+_ROW_SELECTOR = "tr.tableRow.clickable-row.publicationDetail[data-oid]"
 
 
 class VergabekooperationBerlinConnector(BaseConnector):
@@ -39,67 +48,105 @@ class VergabekooperationBerlinConnector(BaseConnector):
     name = "Vergabeplattform Berlin (Vergabekooperation Berlin)"
     base_url = BASE_URL
     vorgegeben = True
+    robots_status = "geprueft_ok"
+    tos_hinweis = (
+        "Keine robots.txt vorhanden (404, geprüft 31.08.2026). Teilnahmebedingungen "
+        "verlangen Registrierung nur für die Angebotsabgabe, nicht für das Einsehen "
+        "öffentlicher Bekanntmachungen. Kein Hinweis auf Verbot automatisierten Abrufs."
+    )
+
+    def _session_ready(self) -> bool:
+        return getattr(self, "_cookie_established", False)
 
     def _ensure_session(self) -> None:
-        # Cookie-Consent-Schritt einmalig durchlaufen; danach hält httpx.Client die Session-Cookies.
+        if self._session_ready():
+            return
         self.polite_get(ENTRY_URL)
+        self._cookie_established = True
 
     def fetch_list_page(self, page: int) -> tuple[list[RawCandidate], bool]:
-        if page == 1:
-            self._ensure_session()
+        self._ensure_session()
 
-        list_url = None
-        last_error: Exception | None = None
-        for candidate_url in LIST_URL_CANDIDATES:
-            try:
-                url = candidate_url if page == 1 else f"{candidate_url}&page={page}"
-                response = self.polite_get(url)
-                list_url = url
-                break
-            except (TechnicalFailure, AccessBlocked) as exc:
-                last_error = exc
-                continue
-
-        if list_url is None:
-            raise TechnicalFailure(
-                "Vergabeplattform Berlin: keine der bekannten Listen-URLs erreichbar - "
-                f"echter Pfad der öffentlichen Bekanntmachungsliste muss noch ermittelt werden ({last_error})."
-            )
-
+        start = (page - 1) * PAGE_SIZE
+        url = (
+            f"{SEARCH_URL}?function=SearchPublications&Category=InvitationToTender"
+            f"&Gesetzesgrundlage=All&Start={start}&thContext=publications"
+        )
+        response = self.polite_get(url)
         soup = BeautifulSoup(response.text, "lxml")
-        items = soup.select(LIST_ITEM_SELECTOR)
+
+        rows = soup.select(_ROW_SELECTOR)
+        if not rows and page == 1:
+            if soup.select_one("table.tableHorizontalHeader") is None:
+                raise TechnicalFailure(
+                    "Vergabeplattform Berlin: Ergebnistabelle nicht gefunden - "
+                    "Seitenstruktur hat sich vermutlich geändert (Cookie-Consent-Schritt prüfen)."
+                )
+            # echte 0-Treffer-Situation - vom Source-Health-Monitoring überwacht (Kapitel 21.3)
+
         candidates: list[RawCandidate] = []
-        for item in items:
-            link = item.select_one(LIST_TITLE_SELECTOR)
-            if link is None or not link.get("href"):
+        for row in rows:
+            oid = row.get("data-oid")
+            if not oid:
                 continue
-            detail_url = urljoin(list_url, link["href"])
-            externe_id = detail_url.rsplit("=", 1)[-1] if "=" in detail_url else detail_url
+            tds = row.find_all("td")
+            tender_type_cells = row.select("td.tenderType")
+            titel_el = row.select_one("td.tender")
+            vergabestelle_el = row.select_one("td.tenderAuthority")
+            frist_el = row.select_one("td.tenderDeadline")
             candidates.append(
-                RawCandidate(externe_id=externe_id, detail_url=detail_url, titel_hint=link.get_text(strip=True))
+                RawCandidate(
+                    externe_id=oid,
+                    detail_url=f"{DETAIL_URL}?function=Detail&TOID={oid}&Category=InvitationToTender",
+                    titel_hint=(titel_el or (tds[1] if len(tds) > 1 else None)).get_text(strip=True)
+                    if (titel_el or len(tds) > 1) else None,
+                    listen_metadaten={
+                        "veroeffentlichungsdatum": tds[0].get_text(strip=True) if tds else None,
+                        "vergabestelle": vergabestelle_el.get_text(strip=True) if vergabestelle_el else None,
+                        "verfahrensart": tender_type_cells[0].get_text(strip=True) if tender_type_cells else None,
+                        "angebotsfrist": frist_el.get_text(strip=True) if frist_el else None,
+                    },
+                )
             )
 
-        if not items and page == 1:
-            raise TechnicalFailure(
-                "Vergabeplattform Berlin: keine Listeneinträge gefunden - Struktur unbekannt, "
-                "Analyse mit echtem Netzzugriff nötig (LIST_ITEM_SELECTOR/LIST_URL_CANDIDATES prüfen)."
-            )
-
-        next_link = soup.select_one("a.naechste-seite, a[rel='next']")
-        return candidates, next_link is not None
+        has_more = soup.select_one('a[title="Next Page"]') is not None
+        return candidates, has_more
 
     def fetch_detail(self, candidate: RawCandidate) -> RawDetail:
+        self._ensure_session()
         response = self.polite_get(candidate.detail_url)
         soup = BeautifulSoup(response.text, "lxml")
-        title_el = soup.select_one("h1, .bekanntmachung-titel")
-        main_el = soup.select_one("main, .content, .bekanntmachung-detail")
 
+        area = soup.select_one("#printarea") or soup
+        volltext = re.sub(r"\s+", " ", area.get_text(" ", strip=True)).strip()
+
+        geschaetzter_wert = _extract(r"Geschätzter Wert ohne MwSt\. \(in Euro\):\s*([\d.,]+)", volltext)
+        cpv = _extract(r"CPV-Code Hauptteil:\s*([\d-]+)", volltext)
+
+        dokumente_links = [
+            a["href"] if a["href"].startswith("http") else BASE_URL + a["href"].lstrip("/")
+            for a in area.select("a[href]")
+            if "TenderingProcedureDetails" in a.get("href", "") or "Unterlagen" in a.get_text()
+        ]
+
+        meta = candidate.listen_metadaten
         return RawDetail(
             externe_id=candidate.externe_id,
             detail_url=candidate.detail_url,
             felder={
-                "titel": title_el.get_text(strip=True) if title_el else candidate.titel_hint,
-                "volltext": main_el.get_text(" ", strip=True) if main_el else None,
-                "quelle_raw_html": str(soup)[:20000],
+                "titel": candidate.titel_hint,
+                "volltext": volltext,
+                "vergabestelle": meta.get("vergabestelle"),
+                "verfahrensart": meta.get("verfahrensart"),
+                "veroeffentlichungsdatum": meta.get("veroeffentlichungsdatum"),
+                "angebotsfrist": meta.get("angebotsfrist"),
+                "geschaetzter_wert": geschaetzter_wert,
+                "cpv_codes": [cpv] if cpv else [],
+                "dokumente_links": list(dict.fromkeys(dokumente_links)),
             },
         )
+
+
+def _extract(pattern: str, text: str) -> str | None:
+    m = re.search(pattern, text)
+    return m.group(1).strip() if m else None

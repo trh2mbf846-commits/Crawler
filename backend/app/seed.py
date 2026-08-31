@@ -19,11 +19,12 @@ PFLICHT_PORTALE = [
         name="Vergabeplattform Berlin (Vergabekooperation Berlin)",
         base_url="https://vergabekooperation.berlin/NetServer/LoginControllerServlet?function=CookiesCheckDone",
         betreiber="Land Berlin – zentrale Vergabeplattform für Berliner Vergabestellen, u. a. BVG",
-        robots_status="ungeprueft",
+        robots_status="geprueft_ok",
         tos_hinweis=(
-            "Noch nicht geprüft: In dieser Entwicklungsumgebung ist ausgehender Internetzugriff "
-            "blockiert (Egress-Proxy), robots.txt/ToS konnten nicht abgerufen werden. Vor "
-            "Produktivbetrieb gemäß Kapitel 9.3 nachholen."
+            "Geprüft 31.08.2026: keine robots.txt vorhanden (404). Teilnahmebedingungen verlangen "
+            "Registrierung nur für die Angebotsabgabe, nicht fürs Einsehen öffentlicher "
+            "Bekanntmachungen. Kein Hinweis auf Verbot automatisierten Abrufs. Details siehe "
+            "docs/portal-notes.md."
         ),
         intervall_minuten=180,
         vorgegeben=True,
@@ -35,8 +36,11 @@ PFLICHT_PORTALE = [
         betreiber="Deutsche Bahn AG – konzernweite Vergabeplattform",
         robots_status="ungeprueft",
         tos_hinweis=(
-            "Noch nicht geprüft (siehe oben). Zusätzlich vermutlich JS-basierte SPA - "
-            "Playwright-Browser konnten in dieser Umgebung mangels Netzzugriff nicht installiert werden."
+            "Kein echtes robots.txt (Server liefert für jeden Pfad die SPA-Startseite). "
+            "Technischer Blocker in dieser Session: Chromium/Playwright-Navigation zu diesem Host "
+            "scheitert am Egress-Proxy (WebSocket-Upgrades nicht unterstützt), obwohl einfache "
+            "HTTP-Abrufe funktionieren - kein Login/CAPTCHA auf der Seite selbst erkennbar. "
+            "Details und Empfehlung siehe docs/portal-notes.md."
         ),
         intervall_minuten=180,
         vorgegeben=True,
@@ -46,8 +50,12 @@ PFLICHT_PORTALE = [
         name="ITDZ Berlin – Aktuelle Ausschreibungen",
         base_url="https://www.itdz-berlin.de/unternehmen/ausschreibungen/aktuelle-ausschreibungen/",
         betreiber="IT-Dienstleistungszentrum Berlin (Land Berlin)",
-        robots_status="ungeprueft",
-        tos_hinweis="Noch nicht geprüft (siehe oben).",
+        robots_status="geprueft_ok",
+        tos_hinweis=(
+            "Geprüft 31.08.2026: robots.txt erlaubt automatisierten Zugriff explizit bei klarer "
+            "User-Agent-Kennung; relevante Disallow-Regeln betreffen diese Seite nicht. Details "
+            "siehe docs/portal-notes.md."
+        ),
         intervall_minuten=120,
         vorgegeben=True,
     ),
