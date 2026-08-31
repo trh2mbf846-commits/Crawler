@@ -6,19 +6,27 @@ werden, ohne die übrige Klassifikationslogik anzufassen.
 """
 from __future__ import annotations
 
-import re
-
 # Kapitel 4.1 - Ausgangsliste an Suchbegriffen (deutsch/englisch).
+#
+# WICHTIG: Kurze Akronyme (ki, ai, ml, llm, rpa, nlp) sind bewusst mit einem führenden UND
+# einem folgenden Leerzeichen gepolstert (" ki ") bzw. mit Leerzeichen+Bindestrich, damit sie
+# nur als eigenständiges Wort/Wortbestandteil treffen, nicht als Teilstring irgendwo mitten in
+# einem unrelated deutschen Wort. Ohne diesen Schutz matcht z. B. "llm" in "bevollmächtigt",
+# "ml" in "nichtförmliches [Verfahren]", "rpa" in "Fuhrparkmanagement" und "ai" in "E-Mail" -
+# das wurde am 31.08.2026 an echten Vergabekooperation-Berlin-Daten nachgewiesen (89 von 139
+# Ausschreibungen fälschlich als "stark KI-relevant" markiert, u. a. Bauleistungen). Beim
+# Ergänzen neuer Kurz-Akronyme IMMER mit Leerzeichen/Bindestrich-Grenzen versehen, siehe
+# find_keyword_hits() unten, die diese Polsterung beim Abgleich bewusst NICHT entfernt.
 KI_KEYWORDS: list[str] = [
-    "künstliche intelligenz", "kuenstliche intelligenz", " ki ", "ki-", "artificial intelligence", " ai ", "ai-",
+    "künstliche intelligenz", "kuenstliche intelligenz", " ki ", " ki-", "artificial intelligence", " ai ", " ai-",
     "maschinelles lernen", "machine learning", " ml ",
     "deep learning", "neuronale netze", "neuronales netz", "neural network",
-    "generative ki", "generative ai", "large language model", "llm", "sprachmodell",
+    "generative ki", "generative ai", "large language model", " llm ", "sprachmodell",
     "chatbot", "virtueller assistent", "sprachassistent", "conversational ai",
     "computer vision", "bilderkennung", "bildverarbeitung",
-    "natural language processing", "nlp", "textanalyse", "sprachverarbeitung",
+    "natural language processing", " nlp ", "textanalyse", "sprachverarbeitung",
     "predictive analytics", "prognosemodell", "data science", "datenanalyse",
-    "prozessautomatisierung", "robotic process automation", "rpa", "intelligente automatisierung",
+    "prozessautomatisierung", "robotic process automation", " rpa ", "intelligente automatisierung",
     "ki-strategie", "ki-plattform", "ki-beratung", "algorithmisches entscheidungssystem",
 ]
 
@@ -40,19 +48,34 @@ KI_RELEVANTE_CPV_PRAEFIXE: list[str] = [
     "73100000",  # Forschungs- und Entwicklungsdienstleistungen
 ]
 
-_KEYWORD_PATTERN = re.compile(
-    "|".join(re.escape(k.strip()) for k in KI_KEYWORDS if k.strip()), re.IGNORECASE
-)
+# Bekannte, portalspezifische Fehltreffer: "AI" ist auf der Vergabekooperation-Berlin-Plattform
+# (u. a. auf jeder Detailseite) die Kurzform von "Administration Intelligence AG", dem
+# Plattformbetreiber (Produktnamen "AI-Bietercockpit"/"AI-Leistungsverzeichnis"), NICHT von
+# "Artificial Intelligence" - nachgewiesen am 31.08.2026 an echten Daten (jeder einzelne der 139
+# getesteten Datensätze enthielt einen dieser Treffer, ausnahmslos falsch-positiv). Werden vor
+# dem Keyword-Abgleich entfernt, damit " ai "/" ai-" nur noch bei echten Treffern greift.
+_BEKANNTE_FEHLTREFFER_PHRASEN = [
+    "ai-bietercockpit", "ai bietercockpit", "ai-leistungsverzeichnis", "vergabemanager ai",
+]
 
 
 def find_keyword_hits(*texts: str | None) -> list[str]:
-    """Liefert die tatsächlich gefundenen Suchbegriffe (nachvollziehbarer Treffer, Kapitel 24)."""
+    """Liefert die tatsächlich gefundenen Suchbegriffe (nachvollziehbarer Treffer, Kapitel 24).
+
+    Der Abgleich erfolgt gegen den UNGEKÜRZTEN Suchbegriff aus KI_KEYWORDS (inkl. der bewusst
+    gesetzten Leerzeichen-/Bindestrich-Wortgrenzen) - nur die Anzeige im Rückgabewert wird
+    getrimmt. Ein `.strip()` vor dem Abgleich würde den Wortgrenzen-Schutz wirkungslos machen
+    (siehe Kommentar bei KI_KEYWORDS).
+    """
     joined = " ".join(f" {t.lower()} " for t in texts if t)
+    for phrase in _BEKANNTE_FEHLTREFFER_PHRASEN:
+        joined = joined.replace(phrase, " ")
     hits: list[str] = []
     for keyword in KI_KEYWORDS:
-        k = keyword.strip()
-        if k and k in joined and k not in hits:
-            hits.append(k)
+        if keyword and keyword in joined:
+            display = keyword.strip()
+            if display not in hits:
+                hits.append(display)
     return hits
 
 
