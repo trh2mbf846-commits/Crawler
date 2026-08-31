@@ -122,6 +122,13 @@ class VergabekooperationBerlinConnector(BaseConnector):
 
         geschaetzter_wert = _extract(r"Geschätzter Wert ohne MwSt\. \(in Euro\):\s*([\d.,]+)", volltext)
         cpv = _extract(r"CPV-Code Hauptteil:\s*([\d-]+)", volltext)
+        # Die "Beschreibung:"-Klausel liegt in einer verschachtelten Tabelle mitten im Dokument;
+        # ohne gezielte Extraktion würde kurzbeschreibung sonst mit der Navigations-/
+        # Kopfzeilen-Boilerplate vom Seitenanfang beginnen (siehe Normalization-Fallback).
+        kurzbeschreibung = _extract(
+            r"Beschreibung:\s*(.*?)(?:\s*Art des Auftrags:|\s*Umfang der Auftragsvergabe|\s*Hauptklassifizierung|\s*$)",
+            volltext,
+        )
 
         dokumente_links = [
             a["href"] if a["href"].startswith("http") else BASE_URL + a["href"].lstrip("/")
@@ -136,6 +143,7 @@ class VergabekooperationBerlinConnector(BaseConnector):
             felder={
                 "titel": candidate.titel_hint,
                 "volltext": volltext,
+                "kurzbeschreibung": kurzbeschreibung,
                 "vergabestelle": meta.get("vergabestelle"),
                 "verfahrensart": meta.get("verfahrensart"),
                 "veroeffentlichungsdatum": meta.get("veroeffentlichungsdatum"),

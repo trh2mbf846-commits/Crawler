@@ -28,6 +28,7 @@ def run_analysis(db: Session, job: Job) -> dict:
         externe_id=job.payload["externe_id"],
         detail_url=job.payload["detail_url"],
         titel_hint=job.payload.get("titel_hint"),
+        listen_metadaten=job.payload.get("listen_metadaten") or {},
     )
 
     connector = connector_cls()

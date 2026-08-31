@@ -55,6 +55,7 @@ def run_discovery(db: Session, job: Job) -> dict:
             payload={
                 "externe_id": candidate.externe_id,
                 "detail_url": candidate.detail_url,
+                "listen_metadaten": candidate.listen_metadaten,
                 "titel_hint": candidate.titel_hint,
             },
         )
