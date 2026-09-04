@@ -33,7 +33,8 @@ DUPLIKAT_SYSTEM = (
 KATEGORISIERUNG_SYSTEM = (
     "Ordne die Ausschreibung einer oder mehreren Kategorien aus der Themen-Taxonomie zu: "
     "KI & Machine Learning, Softwareentwicklung & IT-Dienstleistungen, Cloud & Infrastruktur, "
-    "Daten & Analytics, Beratung & Strategie, Prozessautomatisierung, Cybersecurity, Sonstige IT, "
+    "Daten & Analytics, Beratung & Strategie, Planung & Technische Beratung, "
+    "Bauüberwachung & Bauleitung, Prozessautomatisierung, Cybersecurity, Sonstige IT, "
     'Nicht-IT. Antworte ausschließlich mit JSON im Format {"kategorien": ["..."]}.'
 )
 

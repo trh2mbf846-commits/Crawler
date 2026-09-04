@@ -20,6 +20,8 @@ CATEGORY_ORDER = [
     "Cloud & Infrastruktur",
     "Daten & Analytics",
     "Beratung & Strategie",
+    "Planung & Technische Beratung",
+    "Bauüberwachung & Bauleitung",
     "Prozessautomatisierung",
     "Cybersecurity",
     "Sonstige IT",
@@ -28,9 +30,28 @@ CATEGORY_ORDER = [
 
 _CLOUD_HINTS = ["cloud", "infrastruktur", "hosting", "rechenzentrum", "kubernetes"]
 _SECURITY_HINTS = ["cybersecurity", "informationssicherheit", "it-sicherheit", "penetrationstest", "security"]
-_BERATUNG_HINTS = ["beratung", "strategie", "consulting"]
+_BERATUNG_HINTS = [
+    "beratung", "strategie", "consulting", "change management", "business development",
+    "projektmanagement", "service-management", "prozessberatung",
+]
 _DATEN_HINTS = ["daten", "analytics", "business intelligence", "reporting"]
 _IT_HINTS = ["software", "it-", "informationstechnik", "digitalisierung", "system"]
+
+# Kapitel 4.1-Analog für Nicht-KI-Geschäftsfelder (Nutzeranfrage 01.09.2026, abgeleitet aus
+# double-skill.com): erweitert die Taxonomie über reine IT-Themen hinaus, damit Ausschreibungen
+# aus Planung/Bauüberwachung/Beratung ebenfalls sinnvoll kategorisiert werden, statt in
+# "Sonstige IT"/"Nicht-IT" zu landen. Kurze Akronyme (ava, vob, bim) bewusst mit
+# Leerzeichen-Wortgrenzen gepolstert, siehe keywords.py-Dokumentation zum selben Bug-Muster.
+_PLANUNG_HINTS = [
+    "technische planung", "konzeption und planung", "technisches projektmanagement",
+    "itk-infrastruktur", "ingenieurleistungen", " bim ", "building information modeling",
+    "technologieberatung", "machbarkeitsstudie", "planungsleistungen", "technology engineering",
+]
+_BAUUEBERWACHUNG_HINTS = [
+    "bauüberwachung", "baueberwachung", "bauleitung", "bauleiter", "projektsteuerung",
+    "baukostenmanagement", " ava ", " vob ", "leistungsverzeichnis", "objektüberwachung",
+    "objektueberwachung", "bauherrenvertretung",
+]
 
 
 def run_classification(db: Session, job: Job) -> dict:
@@ -94,7 +115,10 @@ def run_classification(db: Session, job: Job) -> dict:
 
 
 def _kategorisieren(text_basis: str, keyword_hits: list[str], cpv_hits: list[str]) -> list[str]:
-    text = text_basis.lower()
+    # Führendes/folgendes Leerzeichen, damit auch mit Leerzeichen gepolsterte Hints (" bim ",
+    # " ava ", " vob ") am Anfang/Ende des Texts korrekt matchen (gleiches Muster wie in
+    # keywords.find_keyword_hits, siehe dortige Dokumentation zum zugehörigen Bug).
+    text = f" {text_basis.lower()} "
     kategorien: list[str] = []
     if keyword_hits:
         kategorien.append("KI & Machine Learning")
@@ -106,6 +130,10 @@ def _kategorisieren(text_basis: str, keyword_hits: list[str], cpv_hits: list[str
         kategorien.append("Daten & Analytics")
     if any(h in text for h in _BERATUNG_HINTS):
         kategorien.append("Beratung & Strategie")
+    if any(h in text for h in _PLANUNG_HINTS):
+        kategorien.append("Planung & Technische Beratung")
+    if any(h in text for h in _BAUUEBERWACHUNG_HINTS):
+        kategorien.append("Bauüberwachung & Bauleitung")
     if cpv_hits or any(h in text for h in _IT_HINTS):
         if "KI & Machine Learning" not in kategorien:
             kategorien.append("Softwareentwicklung & IT-Dienstleistungen")
