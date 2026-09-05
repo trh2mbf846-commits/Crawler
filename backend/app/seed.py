@@ -1,8 +1,11 @@
 """Seed der Portal-Konfiguration (Kapitel 3, 9.3) und der Kategorien-Taxonomie (Kapitel 7).
 
-Nur die 3 vom Auftraggeber vorgegebenen Portale werden angelegt (Kapitel 16.2). Die von Claude
-Code vorgeschlagenen Ergänzungsportale (Kapitel 16.3 / 3) werden bewusst NICHT automatisch
-angelegt, da laut Handlungsanweisung eine kurze Abstimmung mit Vincent vor Phase 3 aussteht.
+Die 3 vom Auftraggeber vorgegebenen Portale (Kapitel 16.2) sowie die Zusatzportale aus Kapitel
+16.3 werden angelegt - die dort vorgesehene kurze Abstimmung mit Vincent ist durch die
+Nutzeranfrage vom 01.09.2026 ("nehme die ganzen Vergabeportale mit auf") erfolgt. Portale ohne
+fertigen Connector sind trotzdem als Quelle sichtbar (Quellstatus-Dashboard zeigt "in
+Vorbereitung", siehe app/agents/connector/pending.py) statt erst nach vollständiger
+Implementierung zu erscheinen.
 """
 from __future__ import annotations
 
@@ -10,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agents.classification import CATEGORY_ORDER
+from app.agents.connector import ZUSATZPORTALE
 from app.db import SessionLocal, init_db
 from app.models import Category, Portal
 
@@ -61,6 +65,11 @@ PFLICHT_PORTALE = [
     ),
 ]
 
+# Zusatzportale mit fertig implementiertem, echtem Connector (Kapitel 9.1: "gut machbar" laut
+# Recherche vom 04.09.2026) - laufen automatisch im Scheduler. Alle anderen ZUSATZPORTALE
+# bleiben inaktiv (blockiert/eingeschränkt/noch nicht umgesetzt, siehe deren tos_hinweis).
+AKTIVE_ZUSATZ_SLUGS = {"ted", "dtvp", "evergabe-bund"}
+
 
 def run_seed(db: Session) -> None:
     for name in CATEGORY_ORDER:
@@ -71,6 +80,22 @@ def run_seed(db: Session) -> None:
         if db.scalars(select(Portal).where(Portal.slug == daten["slug"])).first() is None:
             db.add(Portal(**daten))
 
+    for zusatz in ZUSATZPORTALE:
+        if db.scalars(select(Portal).where(Portal.slug == zusatz["slug"])).first() is None:
+            db.add(
+                Portal(
+                    slug=zusatz["slug"],
+                    name=zusatz["name"],
+                    base_url=zusatz["base_url"],
+                    betreiber=zusatz["betreiber"],
+                    robots_status=zusatz["robots_status"],
+                    tos_hinweis=zusatz["hinweis"],
+                    intervall_minuten=zusatz["intervall_minuten"],
+                    vorgegeben=False,
+                    aktiv=zusatz["slug"] in AKTIVE_ZUSATZ_SLUGS,
+                )
+            )
+
     db.commit()
 
 
@@ -79,7 +104,8 @@ def main() -> None:
     db = SessionLocal()
     try:
         run_seed(db)
-        print(f"Seed abgeschlossen: {len(PFLICHT_PORTALE)} Portale, {len(CATEGORY_ORDER)} Kategorien.")
+        anzahl = len(PFLICHT_PORTALE) + len(ZUSATZPORTALE)
+        print(f"Seed abgeschlossen: {anzahl} Portale, {len(CATEGORY_ORDER)} Kategorien.")
     finally:
         db.close()
 

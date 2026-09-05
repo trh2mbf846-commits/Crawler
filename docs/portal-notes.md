@@ -76,8 +76,29 @@ Empfehlung: Connector in einer Umgebung mit vollem, proxy-freiem oder WebSocket-
 Netzzugriff (z. B. lokal bei Vincent oder auf einem eigenen Server) verifizieren und dabei
 `robots_status` von `ungeprueft` auf den tatsächlichen Befund aktualisieren.
 
-## Zusatzportale (Kapitel 3, 16.3)
+## Zusatzportale (Kapitel 3, 16.3, Nutzeranfrage 01.09.2026)
 
-Die 5 von Claude Code vorgeschlagenen Ergänzungsportale (e-Vergabe des Bundes, DTVP, Vergabe24,
-TED, service.bund.de) sind bewusst noch nicht in `app/seed.py` angelegt. Laut Handlungsanweisung
-sind sie vor Phase 3 kurz mit Vincent abzustimmen - das ist bislang nicht erfolgt.
+Auf ausdrücklichen Nutzerwunsch ("nehme die ganzen Vergabeportale mit auf") wurden am
+04./05.09.2026 alle 9 genannten Zusatzportale real recherchiert (robots.txt, sichtbare
+Zugriffsschranken, tatsächliche Seitenstruktur) und das Ergebnis direkt in
+`app/agents/connector/__init__.py` (Liste `ZUSATZPORTALE`) sowie hier festgehalten. Für 3
+Portale wurde daraufhin ein echter Connector gebaut und aktiviert; 6 bleiben aus
+dokumentierten, in Kapitel 9.2 vorgesehenen Gründen (Login-/Abo-Pflicht, robots.txt-Sperre,
+Bot-Schutz) inaktiv, aber als Quelle sichtbar ("in Vorbereitung"/blockiert im
+Quellstatus-Dashboard).
+
+| Portal | robots_status | Connector | Kurzbefund |
+|---|---|---|---|
+| **TED – Tenders Electronic Daily** | `geprueft_ok` | aktiv (`ted.py`) | ted.europa.eu selbst hinter AWS-WAF-Challenge, aber offizielle REST Search API `api.ted.europa.eu` ohne Key/Login frei nutzbar. |
+| **DTVP – Deutsches Vergabeportal** | `geprueft_ok` | aktiv (`dtvp.py`) | robots.txt erlaubt automatisierten Zugriff; CPV-Kategorieseiten (nicht die Landingpage) zeigen die vollständige, unverschleierte Trefferliste. Alte Such-Anwendung (`Center/.../search.do`, JWT-CSRF) bewusst nicht verwendet. |
+| **e-Vergabe des Bundes** | `geprueft_ok` | aktiv (`evergabe_bund.py`) | robots.txt erlaubt `/search.html` + `/tenderdetails.html`. Reine Cookie-Consent-Schranke (kein Login). Apache-Wicket-App: die Standardsuche zeigt ohne Eingabe bereits alle offenen Verfahren; Pagination folgt dem serverseitigen "Nächste Seite"-Link statt eigener URL-Konstruktion. Wicket verlangt einen `Referer`-Header bei jedem Folgeaufruf (sonst HTTP 403) - das ist keine Zugriffsschranke i. S. v. Kapitel 9.2, sondern exakt das Verhalten eines normalen Browser-Klicks. |
+| **Vergabe24** | `ungeprueft` | nicht implementiert | Kein öffentlicher Such-/Listing-Bereich auffindbar; Startseite verweist nur auf Tarife und ein separates Login-System. Starke Indizien für Login-/Abo-Pflicht bereits für die Suche → nicht umgangen (Kapitel 9.2), vor Umsetzung mit Vincent abstimmen. |
+| **Vergabemarktplatz Brandenburg** | `geprueft_einschraenkung` | nicht implementiert | robots.txt sperrt explizit ALLE Bots vollständig (`User-agent: * / Disallow: /`) → bewusst nicht implementiert. |
+| **subreport ELViS** | `geprueft_einschraenkung` | nicht implementiert | Trefferlisten-Recherche kostenlos, vollständige Bekanntmachung aber Pay-per-View (ca. 6 €/Ausschreibung); ELViS selbst ist reine Abwicklungssoftware hinter Login. Vor Umsetzung mit Vincent abstimmen (kostenpflichtiger Umfang). |
+| **cosinex Vergabemarktplätze** | `ungeprueft` | nicht implementiert | cosinex ist reiner Software-Anbieter für White-Label-Plattformen (u. a. DTVP, Brandenburg selbst) - keine eigene zentrale Ausschreibungssuche. |
+| **Deutsche eVergabe** | `geprueft_einschraenkung` | nicht implementiert | Eigenständiges Portal (Verwechslungsgefahr mit evergabe-online.de/e-Vergabe des Bundes). "Recherche" ist laut Portal ausdrücklich Teil des registrierungspflichtigen Bereichs - keine Suche ohne (kostenlose) Registrierung gefunden. Nicht umgangen (Kapitel 9.2). |
+| **AI-Förderprogramme (Förderdatenbank BMWK/BMBF)** | `geprueft_einschraenkung` | nicht implementiert | robots.txt erlaubt Zugriff, die Website läuft aber hinter Radware Bot Manager (JS-Verifikationsseite statt Inhalt bei automatisiertem Abruf) - CAPTCHA-artiger Bot-Schutz, nicht umgangen (Kapitel 9.2). Empfehlung: nach offiziellem Datenexport/OpenData-Angebot des Bundes suchen. |
+
+Details je Portal (verifizierte Selektoren, URLs, Randfälle) stehen im jeweiligen
+Connector-Modul-Docstring (`app/agents/connector/ted.py`, `dtvp.py`, `evergabe_bund.py`) bzw.
+im `hinweis`-Feld der `ZUSATZPORTALE`-Liste für die nicht implementierten Portale.

@@ -83,6 +83,10 @@ class BaseConnector(ABC):
     vorgegeben: bool = True
     robots_status: str = "ungeprueft"
     tos_hinweis: str = "Noch nicht geprüft - kein Netzzugriff in dieser Entwicklungsumgebung (Stand siehe Docstring)."
+    # Deckelt die Anzahl der Listenseiten pro Zyklus (Kapitel 9.1: höflicher, begrenzter Abruf
+    # statt vollständiger Historie bei sehr großen Portalen) - einzelne Connectoren mit hohem
+    # Trefferaufkommen überschreiben diesen Wert.
+    max_pages: int = 50
 
     def __init__(self) -> None:
         self._client: httpx.Client | None = None
@@ -105,11 +109,11 @@ class BaseConnector(ABC):
             time.sleep(wait)
         self._last_request_at = time.monotonic()
 
-    def polite_get(self, url: str) -> httpx.Response:
+    def polite_get(self, url: str, headers: dict[str, str] | None = None) -> httpx.Response:
         """GET mit Rate-Limiting (Kapitel 9.1) und Zugriffsschranken-Erkennung (Kapitel 9.2)."""
         self._respect_rate_limit()
         try:
-            response = self.client.get(url)
+            response = self.client.get(url, headers=headers)
         except httpx.HTTPError as exc:
             raise TechnicalFailure(f"HTTP-Fehler beim Abruf von {url}: {exc}") from exc
 
@@ -130,10 +134,11 @@ class BaseConnector(ABC):
     def fetch_detail(self, candidate: RawCandidate) -> RawDetail:
         """Ruft die Detailseite ab und extrahiert die portalspezifischen Rohfelder (reines Parsing)."""
 
-    def iter_all_candidates(self, max_pages: int = 50) -> list[RawCandidate]:
+    def iter_all_candidates(self, max_pages: int | None = None) -> list[RawCandidate]:
+        limit = max_pages if max_pages is not None else self.max_pages
         candidates: list[RawCandidate] = []
         page = 1
-        while page <= max_pages:
+        while page <= limit:
             page_candidates, has_more = self.fetch_list_page(page)
             candidates.extend(page_candidates)
             if not has_more:

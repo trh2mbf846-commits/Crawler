@@ -63,9 +63,16 @@ def run_classification(db: Session, job: Job) -> dict:
     keyword_hits = find_keyword_hits(tender.titel, tender.kurzbeschreibung, tender.volltext)
     cpv_hits = find_cpv_hits(tender.cpv_codes)
 
-    if cpv_hits or len(keyword_hits) >= 2:
+    # Die CPV-Präfixe in keywords.py (72000000, 72200000, ...) sind generische "IT-Dienste/
+    # Softwareprogrammierung"-Kategorien - es gibt keinen eigenen amtlichen CPV-Code speziell
+    # für KI. Ein CPV-Treffer allein deckt daher auch ganz gewöhnliche IT-Ausschreibungen ohne
+    # jeden KI-Bezug ab (z. B. reiner Typo3-/CMS-Support) und darf allein kein "stark"
+    # rechtfertigen - erst zusammen mit einem inhaltlichen Keyword-Treffer ist das Signal stark
+    # genug. Ein CPV-Treffer ohne Keyword-Bestätigung bleibt "moeglich" (echte KI-Nachfrage per
+    # LLM/Rückfrage statt automatischer Übertreibung).
+    if (cpv_hits and keyword_hits) or len(keyword_hits) >= 2:
         einstufung, konfidenz = "stark", 0.8
-    elif keyword_hits:
+    elif keyword_hits or cpv_hits:
         einstufung, konfidenz = "moeglich", 0.5
     else:
         einstufung, konfidenz = "nicht", 0.3
