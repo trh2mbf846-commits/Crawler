@@ -36,6 +36,12 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:5174", "http://127.0.0.1:5174"]
 
+    # Nutzerwunsch (01.09.2026): kein dauerhaftes Hintergrund-Update, sondern ein manueller
+    # Aktualisieren-Button (siehe api/run.py). Für lokale Entwicklung/Tests bleibt der
+    # periodische Scheduler an; im on-demand-Deployment (render.yaml) wird er per
+    # CRAWLER_SCHEDULER_ENABLED=false abgeschaltet.
+    scheduler_enabled: bool = True
+
 
 settings = Settings()
 (BACKEND_DIR / "data").mkdir(parents=True, exist_ok=True)

@@ -124,3 +124,19 @@ class EscalationResolveIn(BaseModel):
 class RunTriggerOut(BaseModel):
     started: bool
     ergebnis: dict | None = None
+
+
+class RunAllPortalResultOut(BaseModel):
+    portal_id: str
+    portal_name: str
+    status_ampel: str | None = None
+    treffer_anzahl: int | None = None
+    fehler: str | None = None
+
+
+class RunAllStatusOut(BaseModel):
+    laeuft: bool
+    gestartet_am: datetime | None
+    beendet_am: datetime | None
+    aktuelles_portal: str | None
+    ergebnisse: list[RunAllPortalResultOut]

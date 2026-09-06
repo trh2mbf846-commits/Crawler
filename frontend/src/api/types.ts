@@ -89,6 +89,22 @@ export interface PortalHealth {
   meldung: string | null
 }
 
+export interface RunAllPortalResult {
+  portal_id: string
+  portal_name: string
+  status_ampel: StatusAmpel | null
+  treffer_anzahl: number | null
+  fehler: string | null
+}
+
+export interface RunAllStatus {
+  laeuft: boolean
+  gestartet_am: string | null
+  beendet_am: string | null
+  aktuelles_portal: string | null
+  ergebnisse: RunAllPortalResult[]
+}
+
 export interface SearchProfile {
   id: string
   name: string

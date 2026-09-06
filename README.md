@@ -8,35 +8,31 @@ Dieses Verzeichnis ist ein eigenständiges Projekt innerhalb dieses Repositories
 **nichts mit dem Brettspiel-Begleit-Projekt im Repository-Root zu tun** (siehe README dort) -
 beide Projekte teilen sich lediglich den Git-Verlauf.
 
-## Aktueller Stand (Update 31.08.2026, nach Freischaltung des Netzzugriffs)
+## Aktueller Stand (Update 06.09.2026)
 
-Netzzugriff für diese Session wurde am 31.08.2026 freigeschaltet (zuvor blockierte der
-Egress-Proxy jeglichen allgemeinen Internetzugriff, siehe Rückfrage im Chat). Daraufhin
-wurden alle 3 Pflicht-Portale real analysiert und die Connectoren gegen die tatsächliche
-Seitenstruktur gebaut und per `python -m app.run_all_connectors` getestet:
+12 Portale sind konfiguriert (3 vom Auftraggeber vorgegeben + 9 auf Nutzerwunsch recherchierte
+Zusatzportale, Kapitel 3/16.3), davon **5 mit echtem, live verifiziertem Connector**:
 
-- **ITDZ Berlin** ✅ läuft produktiv gegen die echte Seite (robots.txt erlaubt automatisierten
-  Zugriff ausdrücklich). Letzter Testlauf: 3 echte, aktuelle Ausschreibungen gefunden,
-  Quellstatus grün.
-- **Vergabeplattform Berlin** ✅ läuft produktiv gegen die echte Seite (keine robots.txt,
-  öffentliche Bekanntmachungssuche ohne Login, sogar Vergabeunterlagen frei zugänglich).
-  Letzter Testlauf: 137 echte, aktuelle Ausschreibungen über 3 Seiten gefunden, Quellstatus
-  grün.
-- **DB Bieterportal** ⚠️ Connector ist vollständig implementiert (Playwright, wie in Kapitel 3
-  vorgesehen), scheitert in dieser konkreten Sandbox-Umgebung aber an einer
-  Egress-Proxy-Einschränkung (WebSocket-Upgrades werden nicht unterstützt, die reine
-  JavaScript-SPA nutzt SignalR/WebSocket) - **kein Login/CAPTCHA auf dem Portal selbst**,
-  sondern eine Einschränkung dieser Session. Details, Diagnose und Empfehlung in
-  `docs/portal-notes.md`.
+| Portal | Status | Letzter Testlauf |
+|---|---|---|
+| Vergabeplattform Berlin (Vergabekooperation Berlin) | ✅ grün | 137 Ausschreibungen |
+| ITDZ Berlin | ✅ grün | 3 Ausschreibungen |
+| TED – Tenders Electronic Daily | ✅ grün | 400 Ausschreibungen (offizielle REST-API) |
+| DTVP – Deutsches Vergabeportal | ✅ grün | 163 Ausschreibungen |
+| e-Vergabe des Bundes | ✅ grün | 30 Ausschreibungen |
+| DB Bieterportal | ⚠️ Connector fertig (Playwright), scheitert nur an einer Proxy-Einschränkung *dieser* Entwicklungsumgebung (kein Login/CAPTCHA auf dem Portal) |
+| 6 weitere (Vergabe24, Vergabemarktplatz Brandenburg, Deutsche eVergabe, subreport ELViS, cosinex, Förderdatenbank) | ⛔ bewusst nicht implementiert - Login-/Abo-Pflicht, robots.txt-Sperre oder Bot-Schutz, jeweils dokumentiert statt umgangen (Kapitel 9.2) |
 
-Details zu robots.txt/ToS je Portal: `docs/portal-notes.md`.
+Details je Portal (robots.txt/ToS, Selektoren, Randfälle): `docs/portal-notes.md` und die
+Docstrings der jeweiligen Connector-Module (`backend/app/agents/connector/*.py`).
 
 **Vollständig funktionierend (Tests + Live-Läufe):** Datenmodell, komplette 8-Agenten-Kette
 (Connector → Discovery → Analysis → Normalization → Duplicate → AI Classification → Search →
-Source Health), Job-/Eskalations-System, Ranking-Engine, Scheduler, REST-API und Frontend
-(Übersicht, Filter, Suche, Detailansicht, Suchprofile, Quellstatus-Dashboard,
-Entscheidungs-Posteingang). 22 automatisierte Tests plus ein realer Testlauf gegen 2 von 3
-Live-Portalen mit insgesamt 140 echten Ausschreibungen.
+Source Health), Job-/Eskalations-System, Ranking-Engine, Scheduler (per Konfiguration
+abschaltbar, siehe Deployment unten), REST-API, manueller Aktualisieren-Button (`POST
+/api/run-all`) und Frontend (Übersicht, Filter, Suche, Detailansicht, Suchprofile,
+Quellstatus-Dashboard mit Quellen-Übersicht, Entscheidungs-Posteingang). 24 automatisierte
+Tests plus reale Testläufe gegen 5 Live-Portale mit 759 echten Ausschreibungen.
 
 ## Projektstruktur
 
@@ -91,6 +87,44 @@ Claude-API-Key für die LLM-Nachbewertung von Grenzfällen) über Umgebungsvaria
 `CRAWLER_`, siehe `backend/app/config.py`. Ohne `CRAWLER_ANTHROPIC_API_KEY` läuft die
 Keyword-/CPV-Klassifikation (Kapitel 4.1/4.2) unverändert weiter - die LLM-Stufe (Kapitel 4.3)
 wird dann einfach übersprungen.
+
+## Deployment (Aktualisieren-Button statt Dauerbetrieb)
+
+Nutzerwunsch (01.09.2026): kein dauerhaftes Hintergrund-Update, sondern ein einziger Link, auf
+dem ein "Aktualisieren"-Button einmal alle aktiven Portale durchsucht - lokal filtern passiert
+danach direkt in der Weboberfläche.
+
+Dafür liegt im Projektordner (`ausschreibungscrawler/`, **nicht** im Repository-Root - das
+enthält zusätzlich ein unabhängiges Brettspiel-Projekt) ein `Dockerfile`, das Frontend und
+Backend in einem einzigen Container ausliefert (das Backend liefert das gebaute Frontend
+selbst mit aus, siehe `backend/app/main.py`). Der periodische Scheduler ist im Image per
+`CRAWLER_SCHEDULER_ENABLED=false` fest abgeschaltet - einzige Aktualisierungsquelle ist der
+Button (`POST /api/run-all`, mit Live-Fortschritt über `GET /api/run-all/status`).
+
+**Render.com:** `render.yaml` liegt bereits vorbereitet vor (Pfade sind repo-root-relativ).
+Entweder diese Datei vor dem Verbinden nach `<repo-root>/render.yaml` kopieren (Render-Blueprints
+werden nur dort automatisch erkannt), oder einfacher: in Render "New → Web Service" (kein
+Blueprint) wählen, dieses Repository verbinden und **Root Directory auf `ausschreibungscrawler`**
+setzen - dann reicht das Dockerfile allein.
+
+**Fly.io:** `fly.toml` liegt direkt in diesem Ordner. Von hier aus (`cd ausschreibungscrawler`)
+`fly launch --no-deploy` (App-Name ggf. anpassen, muss global eindeutig sein), dann `fly deploy`.
+
+**Persistenz:** Ohne bezahlten Disk-Zusatz verliert die SQLite-Datenbank ihren Inhalt bei jedem
+Neustart/Redeploy - beim nächsten Klick auf "Aktualisieren" ist die Liste aber sofort wieder
+gefüllt, was zum Nutzungsmuster "gelegentlich manuell aktualisieren" passt. Für dauerhafte
+Historie: Persistent Disk unter `/app/data` hinzufügen, oder auf die in
+`docs/schema_postgresql.sql` vorbereitete PostgreSQL-Variante wechseln
+(`CRAWLER_DATABASE_URL` entsprechend setzen).
+
+**Lokal testen** (ohne Docker-Daemon geht auch eine manuelle Simulation):
+
+```bash
+cd frontend && VITE_API_BASE_URL=/api npm run build
+cp -r dist ../backend/static
+cd ../backend && CRAWLER_SCHEDULER_ENABLED=false uvicorn app.main:app --port 8000
+# http://localhost:8000 liefert dann Frontend + API aus einem Prozess
+```
 
 ## Weiterführende Dokumente
 

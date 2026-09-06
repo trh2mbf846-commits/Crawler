@@ -3,6 +3,7 @@ import type {
   EscalationStatus,
   HistoryEntry,
   PortalHealth,
+  RunAllStatus,
   SearchProfile,
   SearchProfileInput,
   Tender,
@@ -108,6 +109,14 @@ export function fetchPortals(): Promise<PortalHealth[]> {
 
 export function runPortalTest(id: string): Promise<{ started: true }> {
   return request<{ started: true }>(`/portals/${encodeURIComponent(id)}/run`, { method: 'POST' })
+}
+
+export function runAllPortals(): Promise<RunAllStatus> {
+  return request<RunAllStatus>('/run-all', { method: 'POST' })
+}
+
+export function fetchRunAllStatus(): Promise<RunAllStatus> {
+  return request<RunAllStatus>('/run-all/status')
 }
 
 export function fetchSearchProfiles(): Promise<SearchProfile[]> {

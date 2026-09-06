@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { fetchCategories, fetchPortals, fetchTenders } from '../api/client'
 import { FilterBar, type TenderFilters } from '../components/FilterBar'
 import { Pagination } from '../components/Pagination'
+import { RefreshButton } from '../components/RefreshButton'
 import { SourcesSummary } from '../components/SourcesSummary'
 import { EmptyView, ErrorView, LoadingView } from '../components/StateViews'
 import { TenderCard } from '../components/TenderCard'
@@ -37,7 +38,7 @@ export function Overview() {
   const [page, setPage] = useState(1)
   const debouncedQuery = useDebouncedValue(filters.q, 300)
 
-  const { data: portals } = useAsync(fetchPortals, [])
+  const { data: portals, reload: reloadPortals } = useAsync(fetchPortals, [])
   const { data: categories } = useAsync(fetchCategories, [])
 
   const handleFiltersChange = useCallback((next: TenderFilters) => {
@@ -79,7 +80,15 @@ export function Overview() {
             Alle erfassten Ausschreibungen, sortiert und gefiltert nach KI-Relevanz, Dringlichkeit und Kategorie.
           </p>
         </div>
-        <SourcesSummary portals={portals ?? []} />
+        <div className="flex items-start gap-3">
+          <SourcesSummary portals={portals ?? []} />
+          <RefreshButton
+            onDone={() => {
+              reload()
+              reloadPortals()
+            }}
+          />
+        </div>
       </div>
 
       <FilterBar filters={filters} onChange={handleFiltersChange} portals={portals ?? []} categories={categories ?? []} />
