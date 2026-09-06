@@ -96,6 +96,40 @@ Quellstatus-Dashboard).
 | **Vergabemarktplatz Brandenburg** | `geprueft_einschraenkung` | nicht implementiert | robots.txt sperrt explizit ALLE Bots vollständig (`User-agent: * / Disallow: /`) → bewusst nicht implementiert. |
 | **subreport ELViS** | `geprueft_einschraenkung` | nicht implementiert | Trefferlisten-Recherche kostenlos, vollständige Bekanntmachung aber Pay-per-View (ca. 6 €/Ausschreibung); ELViS selbst ist reine Abwicklungssoftware hinter Login. Vor Umsetzung mit Vincent abstimmen (kostenpflichtiger Umfang). |
 | **cosinex Vergabemarktplätze** | `ungeprueft` | nicht implementiert | cosinex ist reiner Software-Anbieter für White-Label-Plattformen (u. a. DTVP, Brandenburg selbst) - keine eigene zentrale Ausschreibungssuche. |
+
+## Zusatzquelle: offizielle OpenData-API statt Scraping (Nutzeranfrage 05.09.2026)
+
+Auf die Nutzerfrage "können wir andere Wege finden, die Portale zu implementieren" wurde am
+05.09.2026 gezielt nach offiziellen Datenquellen/APIs gesucht (statt der blockierten Portale
+selbst zu scrapen). Fund:
+
+**`oeffentlichevergabe.de` (Beschaffungsamt des BMI, "Datenservice Öffentlicher Einkauf")** -
+eine echte, dokumentierte OpenData-REST-API (`GET /api/notice-exports?pubDay=YYYY-MM-DD&
+format=csv.zip`, Swagger unter `/documentation/swagger-ui/opendata/`), liefert täglich alle
+Bekanntmachungen aus **Bund, Ländern und Kommunen** als normalisierte CSV-Dateien. Live
+verifiziert und implementiert (`app/agents/connector/oeffentlichevergabe.py`).
+
+Stichprobe (04./05.09.2026) bestätigt: Käufer, die intern **Brandenburg** (`vergabemarktplatz-
+brandenburg`, 455 Treffer im Sample) oder **Deutsche eVergabe** (448 Treffer) nutzen, tauchen in
+diesem Datensatz auf - die Quelle deckt also einen Teil der EU-schwellenwertigen
+Bekanntmachungen von zwei der bewusst nicht implementierten Portale indirekt ab, ganz ohne
+diese Portale selbst anzufragen.
+
+Für **Vergabe24**, **subreport ELViS** und **cosinex** wurde ebenfalls nach einer offiziellen
+Alternative gesucht (GovData/CKAN-API stichwortbasiert durchsucht) - kein Treffer, da alle drei
+reine kommerzielle Anbieter ohne eigenen Open-Data-Export sind. Für die **Förderdatenbank**
+(BMWK/BMBF) ebenfalls kein offizieller Datenexport auf GovData gefunden.
+
+Bewusst in Kauf genommene Einschränkungen (mit Nutzer abgestimmt 05.09.2026):
+- Kein Angebotsfrist-Feld in der CSV-Exportvariante (nur Bindefrist/Eröffnungstermin) -
+  `angebotsfrist` bleibt leer, wie beim TED-Connector.
+- Wahrscheinliche Überschneidung mit TED/DTVP (dieselbe EU-Ausschreibung über zwei Quellen mit
+  unterschiedlichen IDs) - Duplikaterkennung arbeitet je Portal, erkennt das nicht.
+- Kein bestätigter, stabiler Detaillink pro Bekanntmachung gefunden - `direktlink` verweist auf
+  das Vergabestellen-Profil, ersatzweise auf die allgemeine Suchoberfläche.
+- Hohes Volumen (ein einzelner Tag: 500-1000+ Bekanntmachungen bundesweit) - Connector bewusst
+  auf 2 Tage/Zyklus begrenzt (`max_pages = 2`), sonst dominiert diese eine Quelle den Datensatz
+  und die Zyklusdauer wächst unnötig.
 | **Deutsche eVergabe** | `geprueft_einschraenkung` | nicht implementiert | Eigenständiges Portal (Verwechslungsgefahr mit evergabe-online.de/e-Vergabe des Bundes). "Recherche" ist laut Portal ausdrücklich Teil des registrierungspflichtigen Bereichs - keine Suche ohne (kostenlose) Registrierung gefunden. Nicht umgangen (Kapitel 9.2). |
 | **AI-Förderprogramme (Förderdatenbank BMWK/BMBF)** | `geprueft_einschraenkung` | nicht implementiert | robots.txt erlaubt Zugriff, die Website läuft aber hinter Radware Bot Manager (JS-Verifikationsseite statt Inhalt bei automatisiertem Abruf) - CAPTCHA-artiger Bot-Schutz, nicht umgangen (Kapitel 9.2). Empfehlung: nach offiziellem Datenexport/OpenData-Angebot des Bundes suchen. |
 

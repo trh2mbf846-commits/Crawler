@@ -55,7 +55,7 @@ def process_job(db: Session, job: Job) -> None:
     queue.mark_succeeded(db, job, job.typ, details=details, dauer_ms=t.ms())
 
 
-def drain_queue(db: Session, limit: int = 2000) -> int:
+def drain_queue(db: Session, limit: int = 10000) -> int:
     processed = 0
     while processed < limit:
         job = queue.claim_next_any(db)

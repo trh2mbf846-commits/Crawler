@@ -10,21 +10,25 @@ beide Projekte teilen sich lediglich den Git-Verlauf.
 
 ## Aktueller Stand (Update 06.09.2026)
 
-12 Portale sind konfiguriert (3 vom Auftraggeber vorgegeben + 9 auf Nutzerwunsch recherchierte
-Zusatzportale, Kapitel 3/16.3), davon **5 mit echtem, live verifiziertem Connector**:
+13 Portale/Quellen sind konfiguriert (3 vom Auftraggeber vorgegeben + 10 auf Nutzerwunsch
+recherchierte Zusatzquellen, Kapitel 3/16.3), davon **6 mit echtem, live verifiziertem
+Connector**:
 
 | Portal | Status | Letzter Testlauf |
 |---|---|---|
-| Vergabeplattform Berlin (Vergabekooperation Berlin) | ✅ grün | 137 Ausschreibungen |
+| Vergabeplattform Berlin (Vergabekooperation Berlin) | ✅ grün | 164 Ausschreibungen |
 | ITDZ Berlin | ✅ grün | 3 Ausschreibungen |
-| TED – Tenders Electronic Daily | ✅ grün | 400 Ausschreibungen (offizielle REST-API) |
-| DTVP – Deutsches Vergabeportal | ✅ grün | 163 Ausschreibungen |
-| e-Vergabe des Bundes | ✅ grün | 30 Ausschreibungen |
+| TED – Tenders Electronic Daily | ✅ grün | 424 Ausschreibungen (offizielle REST-API) |
+| DTVP – Deutsches Vergabeportal | ✅ grün | 286 Ausschreibungen |
+| e-Vergabe des Bundes | ✅ grün | 35 Ausschreibungen |
+| Bekanntmachungsservice (Bund/Länder/Kommunen) | ✅ grün | 4744 Ausschreibungen (offizielle OpenData-API, deckt teilw. auch Brandenburg/Deutsche-eVergabe-Vergabestellen ab) |
 | DB Bieterportal | ⚠️ Connector fertig (Playwright), scheitert nur an einer Proxy-Einschränkung *dieser* Entwicklungsumgebung (kein Login/CAPTCHA auf dem Portal) |
-| 6 weitere (Vergabe24, Vergabemarktplatz Brandenburg, Deutsche eVergabe, subreport ELViS, cosinex, Förderdatenbank) | ⛔ bewusst nicht implementiert - Login-/Abo-Pflicht, robots.txt-Sperre oder Bot-Schutz, jeweils dokumentiert statt umgangen (Kapitel 9.2) |
+| 5 weitere (Vergabe24, Vergabemarktplatz Brandenburg, Deutsche eVergabe, subreport ELViS, cosinex) | ⛔ bewusst nicht implementiert - Login-/Abo-Pflicht, robots.txt-Sperre oder Bot-Schutz, jeweils dokumentiert statt umgangen (Kapitel 9.2) |
+| Förderdatenbank BMWK/BMBF | ⛔ Bot-Schutz, kein offizieller Datenexport gefunden |
 
-Details je Portal (robots.txt/ToS, Selektoren, Randfälle): `docs/portal-notes.md` und die
-Docstrings der jeweiligen Connector-Module (`backend/app/agents/connector/*.py`).
+Details je Portal (robots.txt/ToS, Selektoren, Randfälle, Recherche zu offiziellen
+Datenquellen als Alternative zum Scraping): `docs/portal-notes.md` und die Docstrings der
+jeweiligen Connector-Module (`backend/app/agents/connector/*.py`).
 
 **Vollständig funktionierend (Tests + Live-Läufe):** Datenmodell, komplette 8-Agenten-Kette
 (Connector → Discovery → Analysis → Normalization → Duplicate → AI Classification → Search →
@@ -32,7 +36,11 @@ Source Health), Job-/Eskalations-System, Ranking-Engine, Scheduler (per Konfigur
 abschaltbar, siehe Deployment unten), REST-API, manueller Aktualisieren-Button (`POST
 /api/run-all`) und Frontend (Übersicht, Filter, Suche, Detailansicht, Suchprofile,
 Quellstatus-Dashboard mit Quellen-Übersicht, Entscheidungs-Posteingang). 24 automatisierte
-Tests plus reale Testläufe gegen 5 Live-Portale mit 759 echten Ausschreibungen.
+Tests plus reale Testläufe gegen 6 Live-Portale mit 5656 echten Ausschreibungen.
+
+Bekannte Einschränkung der neuen Quelle "Bekanntmachungsservice": liefert kein
+Angebotsfrist-Feld und überschneidet sich teilweise mit TED/DTVP (dieselbe EU-Ausschreibung
+über zwei Quellen) - Details und Abwägung in `docs/portal-notes.md`.
 
 ## Projektstruktur
 

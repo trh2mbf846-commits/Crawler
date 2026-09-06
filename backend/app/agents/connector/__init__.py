@@ -3,6 +3,7 @@ from app.agents.connector.db_bieterportal import DbBieterportalConnector
 from app.agents.connector.dtvp import DtvpConnector
 from app.agents.connector.evergabe_bund import EvergabeBundConnector
 from app.agents.connector.itdz_berlin import ItdzBerlinConnector
+from app.agents.connector.oeffentlichevergabe import OeffentlicheVergabeConnector
 from app.agents.connector.pending import make_pending_connector
 from app.agents.connector.ted import TedConnector
 from app.agents.connector.vergabekooperation_berlin import VergabekooperationBerlinConnector
@@ -130,6 +131,21 @@ ZUSATZPORTALE: list[dict] = [
         ),
     ),
     dict(
+        slug="oeffentlichevergabe",
+        robots_status="geprueft_ok",
+        name="Bekanntmachungsservice (Bund/Länder/Kommunen)",
+        base_url="https://www.oeffentlichevergabe.de/api/notice-exports",
+        betreiber="Beschaffungsamt des Bundesministeriums des Innern (BMI) - Datenservice Öffentlicher Einkauf",
+        intervall_minuten=720,
+        hinweis=(
+            "Geprüft 05.09.2026: offizielle OpenData-REST-API (kein Scraping, kein Login), liefert "
+            "täglich alle Bekanntmachungen aus Bund/Ländern/Kommunen als CSV. Deckt teilweise auch "
+            "Vergabestellen ab, die intern Brandenburg/Deutsche eVergabe nutzen. Einschränkungen: kein "
+            "Angebotsfrist-Feld in dieser CSV-Variante, mögliche Überschneidung mit TED/DTVP (mit "
+            "Vincent 05.09.2026 abgestimmt, bewusst in Kauf genommen). Connector implementiert."
+        ),
+    ),
+    dict(
         slug="foerderdatenbank-ki",
         robots_status="geprueft_einschraenkung",
         name="AI-Förderprogramme (Förderdatenbank BMWK/BMBF)",
@@ -152,6 +168,7 @@ _ECHTE_ZUSATZ_CONNECTOREN: dict[str, type[BaseConnector]] = {
     TedConnector.slug: TedConnector,
     DtvpConnector.slug: DtvpConnector,
     EvergabeBundConnector.slug: EvergabeBundConnector,
+    OeffentlicheVergabeConnector.slug: OeffentlicheVergabeConnector,
 }
 CONNECTORS.update(_ECHTE_ZUSATZ_CONNECTOREN)
 
