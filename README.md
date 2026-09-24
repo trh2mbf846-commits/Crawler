@@ -8,20 +8,21 @@ Dieses Verzeichnis ist ein eigenständiges Projekt innerhalb dieses Repositories
 **nichts mit dem Brettspiel-Begleit-Projekt im Repository-Root zu tun** (siehe README dort) -
 beide Projekte teilen sich lediglich den Git-Verlauf.
 
-## Aktueller Stand (Update 06.09.2026)
+## Aktueller Stand (Update 05.09.2026, Parallelisierung + Abdeckung)
 
 13 Portale/Quellen sind konfiguriert (3 vom Auftraggeber vorgegeben + 10 auf Nutzerwunsch
 recherchierte Zusatzquellen, Kapitel 3/16.3), davon **6 mit echtem, live verifiziertem
-Connector**:
+Connector**. Letzter kompletter Aktualisieren-Lauf (alle Portale parallel, aus leerer
+Datenbank): **6987 Ausschreibungen in 13 Minuten**:
 
 | Portal | Status | Letzter Testlauf |
 |---|---|---|
-| Vergabeplattform Berlin (Vergabekooperation Berlin) | ✅ grün | 164 Ausschreibungen |
-| ITDZ Berlin | ✅ grün | 3 Ausschreibungen |
-| TED – Tenders Electronic Daily | ✅ grün | 424 Ausschreibungen (offizielle REST-API) |
-| DTVP – Deutsches Vergabeportal | ✅ grün | 286 Ausschreibungen |
-| e-Vergabe des Bundes | ✅ grün | 35 Ausschreibungen |
-| Bekanntmachungsservice (Bund/Länder/Kommunen) | ✅ grün | 4744 Ausschreibungen (offizielle OpenData-API, deckt teilw. auch Brandenburg/Deutsche-eVergabe-Vergabestellen ab) |
+| Bekanntmachungsservice (Bund/Länder/Kommunen) | ✅ grün | 5351 Ausschreibungen (offizielle OpenData-API, deckt teilw. auch Brandenburg/Deutsche-eVergabe-Vergabestellen ab) |
+| TED – Tenders Electronic Daily | ✅ grün | 1000 Ausschreibungen (offizielle REST-API) |
+| DTVP – Deutsches Vergabeportal | ✅ grün | 387 Ausschreibungen |
+| e-Vergabe des Bundes | ✅ grün | 130 Ausschreibungen |
+| Vergabeplattform Berlin (Vergabekooperation Berlin) | ✅ grün | 115 Ausschreibungen |
+| ITDZ Berlin | ✅ grün | 4 Ausschreibungen |
 | DB Bieterportal | ⚠️ Connector fertig (Playwright), scheitert nur an einer Proxy-Einschränkung *dieser* Entwicklungsumgebung (kein Login/CAPTCHA auf dem Portal) |
 | 5 weitere (Vergabe24, Vergabemarktplatz Brandenburg, Deutsche eVergabe, subreport ELViS, cosinex) | ⛔ bewusst nicht implementiert - Login-/Abo-Pflicht, robots.txt-Sperre oder Bot-Schutz, jeweils dokumentiert statt umgangen (Kapitel 9.2) |
 | Förderdatenbank BMWK/BMBF | ⛔ Bot-Schutz, kein offizieller Datenexport gefunden |
@@ -36,7 +37,7 @@ Source Health), Job-/Eskalations-System, Ranking-Engine, Scheduler (per Konfigur
 abschaltbar, siehe Deployment unten), REST-API, manueller Aktualisieren-Button (`POST
 /api/run-all`) und Frontend (Übersicht, Filter, Suche, Detailansicht, Suchprofile,
 Quellstatus-Dashboard mit Quellen-Übersicht, Entscheidungs-Posteingang). 24 automatisierte
-Tests plus reale Testläufe gegen 6 Live-Portale.
+Tests plus reale Testläufe gegen 6 Live-Portale mit 6987 echten Ausschreibungen.
 
 ### Aktualisieren-Button: parallel + maximale Abdeckung (Update 05.09.2026)
 

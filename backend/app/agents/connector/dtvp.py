@@ -121,6 +121,14 @@ class DtvpConnector(BaseConnector):
             if link is None or not link.get("href"):
                 continue
             detail_url = link["href"]
+            if not detail_url.startswith("http"):
+                # Ab einer gewissen Seitentiefe blendet DTVP zusätzlich zu echten, nur optisch
+                # unscharf dargestellten Einträgen (Klasse "is-blurred", haben trotzdem eine
+                # echte, nutzbare URL) eine wiederholte Registrierungs-Karte als Pseudo-Artikel
+                # ein - deren Link ist ein bloßes "#" statt einer echten Detailseite. Kein Titel/
+                # keine ID, also kein verwertbarer Kandidat - übersprungen statt als kaputte
+                # Ausschreibung mit "#"-Link weiterzureichen.
+                continue
             externe_id = article.get("id", "").removeprefix("post_") or detail_url.rstrip("/").rsplit("/", 1)[-1]
             candidates.append(
                 RawCandidate(
