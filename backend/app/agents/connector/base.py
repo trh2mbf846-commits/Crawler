@@ -139,7 +139,16 @@ class BaseConnector(ABC):
         candidates: list[RawCandidate] = []
         page = 1
         while page <= limit:
-            page_candidates, has_more = self.fetch_list_page(page)
+            try:
+                page_candidates, has_more = self.fetch_list_page(page)
+            except TechnicalFailure:
+                if page == 1:
+                    raise  # gleich die erste Seite fehlgeschlagen - echtes Problem, nicht nur "Ende erreicht"
+                # Nutzeranfrage 05.09.2026 ("möglichst viele Ausschreibungen abbilden"): ein
+                # Fehler auf einer späteren Seite darf nicht die bereits gefundenen Kandidaten
+                # früherer Seiten verwerfen - Pagination hier sauber abbrechen und behalten, was
+                # da ist, statt der aufrufenden Seite (Discovery) alles zu verlieren.
+                break
             candidates.extend(page_candidates)
             if not has_more:
                 break

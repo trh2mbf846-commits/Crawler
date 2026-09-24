@@ -24,9 +24,10 @@ Verifiziert am 04./05.09.2026 gegen die echte Seite. Befund:
 """
 from __future__ import annotations
 
+import httpx
 from bs4 import BeautifulSoup
 
-from app.agents.connector.base import BaseConnector, RawCandidate, RawDetail
+from app.agents.connector.base import BaseConnector, RawCandidate, RawDetail, detect_access_block
 from app.exceptions import TechnicalFailure
 
 BASE_URL = "https://dtvp.de/ausschreibungen/"
@@ -38,10 +39,9 @@ _KATEGORIEN: list[str] = [
     "https://dtvp.de/ausschreibungen/cpv/dienstleistungen-von-ingenieurbueros-71300000-1/",
     "https://dtvp.de/ausschreibungen/cpv/unternehmens-und-managementberatung-und-zugehoerige-dienste-79400000-8/",
 ]
-# Pro Kategorie max. so viele Seiten (16 Treffer/Seite) - begrenzt die Laufzeit pro Zyklus
-# (Kapitel 9.1: höflicher, begrenzter Abruf statt vollständiger Historie); die neuesten
-# Ausschreibungen stehen zuerst.
-_MAX_SEITEN_PRO_KATEGORIE = 6
+# Pro Kategorie max. so viele Seiten (16 Treffer/Seite). Nutzeranfrage 05.09.2026: möglichst
+# viele Ausschreibungen abbilden, lokal filtern statt serverseitig stark einzuschränken.
+_MAX_SEITEN_PRO_KATEGORIE = 20
 
 
 class DtvpConnector(BaseConnector):
@@ -50,32 +50,62 @@ class DtvpConnector(BaseConnector):
     base_url = BASE_URL
     vorgegeben = False
     robots_status = "geprueft_ok"
-    # Selbstbegrenzend: 3 Kategorien x _MAX_SEITEN_PRO_KATEGORIE (6) = 18 virtuelle Seiten,
-    # danach liefert fetch_list_page von sich aus has_more=False - dieser Wert ist nur eine
-    # zusätzliche Absicherung, keine funktionale Grenze.
-    max_pages = 18
+    # Selbstbegrenzend: 3 Kategorien x _MAX_SEITEN_PRO_KATEGORIE virtuelle Seiten, danach liefert
+    # fetch_list_page von sich aus has_more=False - dieser Wert ist nur eine zusätzliche
+    # Absicherung, keine funktionale Grenze.
+    max_pages = 3 * _MAX_SEITEN_PRO_KATEGORIE
     tos_hinweis = (
         "robots.txt (Standard-WordPress) erlaubt automatisierten Zugriff auf die öffentliche "
         "Sektion /ausschreibungen/; die genutzten CPV-Kategorieseiten sind vollständig "
         "öffentlich (kein Login, kein Blur-Teaser)."
     )
 
-    def _seite_fuer(self, virtuelle_seite: int) -> tuple[str, int] | None:
-        """Bildet eine fortlaufende virtuelle Seitenzahl auf (Kategorie-URL, reale Seite) ab."""
+    def __init__(self) -> None:
+        super().__init__()
+        # Wir kennen die reale Seitenzahl je Kategorie nicht im Voraus (kleine Kategorien wie
+        # "Beratung" haben z. B. nur ~5 Seiten, andere deutlich mehr) - einmal als erschöpft
+        # erkannte Kategorien (HTTP 404 auf einer Folgeseite) werden hier vermerkt, damit nicht
+        # bis zu _MAX_SEITEN_PRO_KATEGORIE weitere, garantiert leere Anfragen an dieselbe
+        # Kategorie geschickt werden.
+        self._erschoepfte_kategorien: set[int] = set()
+
+    def _seite_fuer(self, virtuelle_seite: int) -> tuple[int, str, int] | None:
+        """Bildet eine fortlaufende virtuelle Seitenzahl auf (Kategorie-Index, -URL, reale Seite) ab."""
         index = virtuelle_seite - 1
         kategorie_index, reale_seite = divmod(index, _MAX_SEITEN_PRO_KATEGORIE)
         if kategorie_index >= len(_KATEGORIEN):
             return None
-        return _KATEGORIEN[kategorie_index], reale_seite + 1
+        return kategorie_index, _KATEGORIEN[kategorie_index], reale_seite + 1
 
     def fetch_list_page(self, page: int) -> tuple[list[RawCandidate], bool]:
         ziel = self._seite_fuer(page)
         if ziel is None:
             return [], False
-        kategorie_url, reale_seite = ziel
+        kategorie_index, kategorie_url, reale_seite = ziel
+
+        if kategorie_index in self._erschoepfte_kategorien:
+            return [], self._seite_fuer(page + 1) is not None
 
         url = kategorie_url if reale_seite == 1 else f"{kategorie_url}page/{reale_seite}/"
-        response = self.polite_get(url)
+        self._respect_rate_limit()
+        try:
+            response = self.client.get(url)
+        except httpx.HTTPError as exc:
+            raise TechnicalFailure(f"DTVP: HTTP-Fehler bei {url}: {exc}") from exc
+
+        if reale_seite > 1 and response.status_code == 404:
+            # Reale Kategorie ist kürzer als unser Seitenbudget (_MAX_SEITEN_PRO_KATEGORIE) -
+            # WordPress liefert für eine nicht existierende Seitenzahl 404 statt einer leeren
+            # Trefferliste. Kein Zugriffsproblem, sondern schlicht "diese Kategorie ist zu Ende".
+            self._erschoepfte_kategorien.add(kategorie_index)
+            return [], self._seite_fuer(page + 1) is not None
+
+        block = detect_access_block(response.text, response.status_code)
+        if block is not None:
+            raise block
+        if response.status_code >= 400:
+            raise TechnicalFailure(f"DTVP: HTTP {response.status_code} bei {url}")
+
         soup = BeautifulSoup(response.text, "lxml")
 
         articles = soup.select('article[role="article"]')

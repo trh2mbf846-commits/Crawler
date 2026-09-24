@@ -36,7 +36,36 @@ Source Health), Job-/Eskalations-System, Ranking-Engine, Scheduler (per Konfigur
 abschaltbar, siehe Deployment unten), REST-API, manueller Aktualisieren-Button (`POST
 /api/run-all`) und Frontend (Übersicht, Filter, Suche, Detailansicht, Suchprofile,
 Quellstatus-Dashboard mit Quellen-Übersicht, Entscheidungs-Posteingang). 24 automatisierte
-Tests plus reale Testläufe gegen 6 Live-Portale mit 5656 echten Ausschreibungen.
+Tests plus reale Testläufe gegen 6 Live-Portale.
+
+### Aktualisieren-Button: parallel + maximale Abdeckung (Update 05.09.2026)
+
+Nutzeranfrage: "möglichst viele Ausschreibungen abbilden können und ausfiltern" + der
+Aktualisieren-Button soll zuverlässig "nochmal alles durchsucht". Daraufhin überarbeitet:
+
+- **Portale laufen jetzt parallel** statt nacheinander (`app/api/run.py`,
+  `ThreadPoolExecutor`), damit ein Lauf trotz wachsender Quellenzahl und höherer
+  Abdeckungs-Limits in vertretbarer Zeit fertig wird. Der Frontend-Button zeigt alle gerade
+  laufenden Quellen gleichzeitig an.
+- Dafür zwei Voraussetzungen geschaffen: SQLite läuft jetzt im **WAL-Modus** mit großzügigem
+  `busy_timeout` (`app/db.py`), und das Job-Claiming in der Warteschlange ist jetzt
+  **race-sicher** (atomares `UPDATE...WHERE status='queued'` statt SELECT+UPDATE,
+  `app/queue.py`) - sonst hätten zwei parallel laufende Portale denselben Job doppelt verarbeiten
+  oder sich gegenseitig die Ergebnisse "wegschnappen" können. Zusätzlich arbeitet jeder
+  Portal-Zyklus jetzt nur noch seine **eigenen** Warteschlangen-Jobs ab
+  (`drain_queue_for_portal`) statt der gesamten globalen Warteschlange - das behebt einen
+  Seiteneffekt, bei dem ein Portal fälschlich als "rot" gemeldet wurde, weil ein paralleler
+  anderer Portal-Lauf seinen Discovery-Job "weggeschnappt" hatte.
+- **Abdeckungs-Limits deutlich angehoben** (Nutzerpriorität: Breite vor serverseitiger
+  Vorfilterung, Filtern passiert client-seitig): TED 20 statt 8 Seiten, e-Vergabe des Bundes 30
+  statt 10 Seiten, DTVP 20 statt 6 Seiten pro Kategorie, Bekanntmachungsservice 7 statt 2 Tage.
+- Dabei einen echten Bug im DTVP-Connector gefunden und behoben: kleinere CPV-Kategorien (z. B.
+  "Beratung", nur ~5 reale Seiten) lieferten bei Seite 6+ HTTP 404 statt einer leeren Liste -
+  das ließ den kompletten Discovery-Lauf fehlschlagen und **alle** bereits gefundenen
+  Kandidaten verwerfen, nicht nur die eine überzählige Seite. Der Connector erkennt erschöpfte
+  Kategorien jetzt selbst und überspringt sie. Als zusätzliche Absicherung bricht
+  `iter_all_candidates` (Basisklasse aller Connectoren) bei einem Fehler auf einer späteren
+  Seite jetzt sauber ab und behält die bereits gefundenen Kandidaten, statt alles zu verlieren.
 
 Bekannte Einschränkung der neuen Quelle "Bekanntmachungsservice": liefert kein
 Angebotsfrist-Feld und überschneidet sich teilweise mit TED/DTVP (dieselbe EU-Ausschreibung

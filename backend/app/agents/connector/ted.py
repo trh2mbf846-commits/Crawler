@@ -63,9 +63,10 @@ class TedConnector(BaseConnector):
     base_url = API_URL
     vorgegeben = False
     robots_status = "geprueft_ok"
-    # Begrenzt Laufzeit/Höflichkeit pro Zyklus (Kapitel 9.1) - 8 Seiten x 50 = bis zu 400
-    # Kandidaten, mehr als ausreichend angesichts des bereits themenfokussierten FT-Filters.
-    max_pages = 8
+    # Nutzeranfrage 05.09.2026: möglichst viele Ausschreibungen abbilden, lokal filtern statt
+    # serverseitig vorab stark einzuschränken - 20 Seiten x 50 = bis zu 1000 Kandidaten (das
+    # Zeitfenster _FENSTER_TAGE und der thematische FT-Filter grenzen weiterhin sinnvoll ein).
+    max_pages = 20
     tos_hinweis = (
         "Offizielle REST Search API (api.ted.europa.eu), kein Key/Login nötig. "
         "ted.europa.eu selbst (WAF-geschützt) wird nicht angefragt."

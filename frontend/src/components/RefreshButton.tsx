@@ -81,8 +81,8 @@ export function RefreshButton({ onDone }: { onDone: () => void }) {
         {laeuft ? 'Aktualisiere…' : 'Aktualisieren'}
       </button>
       {laeuft ? (
-        <span className="text-xs text-ink-faint">
-          {status?.aktuelles_portal ? `Durchsuche: ${status.aktuelles_portal}` : 'Startet…'}
+        <span className="max-w-[280px] text-right text-xs text-ink-faint">
+          {status?.aktuelle_portale.length ? `Durchsuche parallel: ${status.aktuelle_portale.join(', ')}` : 'Startet…'}
           {fertigCount > 0 ? ` (${fertigCount} fertig)` : ''}
         </span>
       ) : null}

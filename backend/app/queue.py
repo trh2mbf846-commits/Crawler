@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.models import Escalation, Job, JobEvent
@@ -56,27 +56,49 @@ def enqueue(
 
 
 def claim_next(db: Session, typ: str) -> Job | None:
-    job = db.scalars(
-        select(Job).where(Job.typ == typ, Job.status == "queued").order_by(Job.erstellt_am).limit(1)
-    ).first()
-    return _claim(db, job)
+    return _claim_loop(db, lambda: select(Job).where(Job.typ == typ, Job.status == "queued").order_by(Job.erstellt_am).limit(1))
 
 
 def claim_next_any(db: Session) -> Job | None:
     """Claimt den ältesten wartenden Job unabhängig vom Typ (Kapitel 19.1: eine zentrale Warteschlange)."""
-    job = db.scalars(select(Job).where(Job.status == "queued").order_by(Job.erstellt_am).limit(1)).first()
-    return _claim(db, job)
+    return _claim_loop(db, lambda: select(Job).where(Job.status == "queued").order_by(Job.erstellt_am).limit(1))
 
 
-def _claim(db: Session, job: Job | None) -> Job | None:
-    if job is None:
-        return None
-    job.status = "running"
-    job.gestartet_am = datetime.utcnow()
-    job.versuch_nr += 1
-    db.commit()
-    db.refresh(job)
-    return job
+def claim_next_for_portal(db: Session, portal_id: str) -> Job | None:
+    """Wie claim_next_any, aber nur Jobs eines Portals - für parallele Portal-Läufe (Nutzeranfrage
+
+    05.09.2026), damit der Warteschlangen-Abbau eines Portal-Zyklus nicht versehentlich Jobs
+    eines gleichzeitig laufenden anderen Portals mit-abarbeitet (das würde sonst u. a. dazu
+    führen, dass der eigene Discovery-Job noch "running" ist, wenn der Zyklus seinen Status
+    prüft, weil ein anderer Thread ihn parallel übernommen hat).
+    """
+    return _claim_loop(
+        db, lambda: select(Job).where(Job.portal_id == portal_id, Job.status == "queued").order_by(Job.erstellt_am).limit(1)
+    )
+
+
+def _claim_loop(db: Session, kandidat_query) -> Job | None:
+    # Race-sicher für parallele Aufrufer (Nutzeranfrage 05.09.2026: Portale beim
+    # Aktualisieren-Button parallel statt sequenziell abarbeiten): SELECT + separates UPDATE
+    # wäre nicht atomar - zwei Threads könnten denselben "queued"-Job vor dem jeweiligen Commit
+    # sehen und doppelt verarbeiten. Die UPDATE...WHERE status='queued' unten schlägt für den
+    # Verlierer mit rowcount=0 fehl (SQLite serialisiert konkurrierende Schreibzugriffe auf
+    # Zeilenebene ohnehin), der dann den nächsten Kandidaten versucht statt den bereits
+    # geclaimten Job doppelt zu übernehmen.
+    while True:
+        job = db.scalars(kandidat_query()).first()
+        if job is None:
+            return None
+        ergebnis = db.execute(
+            update(Job)
+            .where(Job.id == job.id, Job.status == "queued")
+            .values(status="running", gestartet_am=datetime.utcnow(), versuch_nr=Job.versuch_nr + 1)
+        )
+        db.commit()
+        if ergebnis.rowcount == 1:
+            db.refresh(job)
+            return job
+        # Ein anderer Aufrufer war schneller - nächsten Kandidaten versuchen.
 
 
 def log_event(

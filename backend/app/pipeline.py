@@ -55,7 +55,7 @@ def process_job(db: Session, job: Job) -> None:
     queue.mark_succeeded(db, job, job.typ, details=details, dauer_ms=t.ms())
 
 
-def drain_queue(db: Session, limit: int = 10000) -> int:
+def drain_queue(db: Session, limit: int = 100000) -> int:
     processed = 0
     while processed < limit:
         job = queue.claim_next_any(db)
@@ -66,15 +66,32 @@ def drain_queue(db: Session, limit: int = 10000) -> int:
     return processed
 
 
-def run_portal_cycle(db: Session, portal: Portal) -> dict:
-    """Ein vollständiger Testlauf für genau ein Portal: Discovery anstoßen, Warteschlange bis
+def drain_queue_for_portal(db: Session, portal_id: str, limit: int = 100000) -> int:
+    """Wie drain_queue, aber nur Jobs eines Portals (Nutzeranfrage 05.09.2026: Portale beim
 
-    zum Ende abarbeiten, Ergebnis für das Source-Health-Monitoring protokollieren.
+    Aktualisieren-Button parallel statt sequenziell abarbeiten) - verhindert, dass der Zyklus
+    eines Portals versehentlich Jobs eines gleichzeitig laufenden anderen Portals übernimmt.
+    """
+    processed = 0
+    while processed < limit:
+        job = queue.claim_next_for_portal(db, portal_id)
+        if job is None:
+            break
+        process_job(db, job)
+        processed += 1
+    return processed
+
+
+def run_portal_cycle(db: Session, portal: Portal) -> dict:
+    """Ein vollständiger Testlauf für genau ein Portal: Discovery anstoßen, die aus diesem
+
+    Portal entstehenden Jobs bis zum Ende abarbeiten, Ergebnis für das Source-Health-Monitoring
+    protokollieren.
     """
     start = datetime.utcnow()
     job = queue.enqueue(db, "discovery", portal_id=portal.id, payload={})
 
-    processed = drain_queue(db)
+    processed = drain_queue_for_portal(db, portal.id)
 
     db.refresh(job)
     dauer_ms = int((datetime.utcnow() - start).total_seconds() * 1000)

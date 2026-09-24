@@ -101,7 +101,7 @@ export interface RunAllStatus {
   laeuft: boolean
   gestartet_am: string | null
   beendet_am: string | null
-  aktuelles_portal: string | null
+  aktuelle_portale: string[]
   ergebnisse: RunAllPortalResult[]
 }
 

@@ -57,12 +57,12 @@ class OeffentlicheVergabeConnector(BaseConnector):
     base_url = API_URL
     vorgegeben = False
     robots_status = "geprueft_ok"
-    # Nur 2 Tage zurück pro Zyklus - ein einzelner Tag liegt bei Bund/Länder/Kommunen bereits bei
-    # 500-1000+ Bekanntmachungen (deutlich mehr als jeder andere Connector), ein Tages-ZIP ist
-    # bewusst granular (statt der riesigen Monats-ZIPs). Einmal eingelesene Tage liefern beim
-    # nächsten Zyklus dieselben noticeIdentifier zurück, die Duplikaterkennung (Kapitel 18) fängt
-    # das ab - mehr als 2 Tage würden hauptsächlich redundante Arbeit pro Zyklus erzeugen.
-    max_pages = 2
+    # Nutzeranfrage 05.09.2026: möglichst viele Ausschreibungen abbilden - 7 Tage zurück pro
+    # Zyklus (ein einzelner Tag liegt bei Bund/Länder/Kommunen bereits bei 500-1000+
+    # Bekanntmachungen). Ein Tages-ZIP ist bewusst granular (statt der riesigen Monats-ZIPs).
+    # Einmal eingelesene Tage liefern beim nächsten Zyklus dieselben noticeIdentifier zurück,
+    # die Duplikaterkennung (Kapitel 18) fängt das ab statt doppelte Tenders anzulegen.
+    max_pages = 7
     tos_hinweis = (
         "Offizielle OpenData-REST-API des Beschaffungsamts des BMI (Datenservice Öffentlicher "
         "Einkauf), kein Scraping, kein Login. Dokumentiert unter "

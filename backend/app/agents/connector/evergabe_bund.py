@@ -45,9 +45,10 @@ class EvergabeBundConnector(BaseConnector):
     base_url = SEARCH_URL
     vorgegeben = False
     robots_status = "geprueft_ok"
-    # Begrenzt Laufzeit/Höflichkeit pro Zyklus (Kapitel 9.1) - 10 Seiten x 10 = 100 Kandidaten
-    # der neuesten (Sortierung: veröffentlicht absteigend) von insgesamt >1000 offenen Verfahren.
-    max_pages = 10
+    # Nutzeranfrage 05.09.2026: möglichst viele Ausschreibungen abbilden - 30 Seiten x 10 = bis
+    # zu 300 Kandidaten der neuesten (Sortierung: veröffentlicht absteigend) von insgesamt
+    # >1000 offenen Verfahren.
+    max_pages = 30
     tos_hinweis = (
         "robots.txt erlaubt /search.html und /tenderdetails.html; nur wenige Pfade gesperrt "
         "(u. a. /ws-suche/), werden nicht angefragt. Suche funktioniert ohne Login (nur "

@@ -138,5 +138,5 @@ class RunAllStatusOut(BaseModel):
     laeuft: bool
     gestartet_am: datetime | None
     beendet_am: datetime | None
-    aktuelles_portal: str | None
+    aktuelle_portale: list[str]
     ergebnisse: list[RunAllPortalResultOut]
