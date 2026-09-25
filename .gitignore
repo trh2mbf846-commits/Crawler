@@ -1,0 +1,26 @@
+# Logs
+*.log
+
+# Frontend
+node_modules
+frontend/dist
+frontend/.env
+*.local
+
+# Python-Backend
+backend/.venv
+__pycache__/
+*.pyc
+backend/.pytest_cache
+backend/data/*.db
+backend/data/*.db-wal
+backend/data/*.db-shm
+backend/.env
+# Docker-Build-Artefakt (siehe Dockerfile) - lokal nur zum manuellen Testen kopiert, nie committen
+backend/static
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store

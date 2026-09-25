@@ -1,0 +1,38 @@
+# Fly.io-Konfiguration (Alternative zu render.yaml) für dasselbe Ein-Container-Deployment.
+# Einbinden: im Repository-Root `fly launch --no-deploy` ausführen (übernimmt
+# dieses fly.toml + das Dockerfile aus demselben Ordner), dann `fly deploy`. App-Name ggf. vorher
+# in `fly.toml` anpassen (muss global eindeutig sein) oder beim `fly launch` interaktiv vergeben
+# lassen.
+#
+# Bewusst kein Dauerbetrieb (Nutzeranfrage 01.09.2026): CRAWLER_SCHEDULER_ENABLED=false im
+# Dockerfile deaktiviert den periodischen Scheduler; Aktualisierung nur über den
+# "Aktualisieren"-Button (POST /api/run-all). `auto_stop_machines` darf daher unbesorgt aktiv
+# bleiben - die App muss zwischen Klicks nicht durchlaufen.
+app = "ausschreibungscrawler"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  CRAWLER_SCHEDULER_ENABLED = "false"
+  CRAWLER_HTTP_REQUEST_DELAY_SECONDS = "1.5"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[http_service.checks]]
+  path = "/api/health"
+  interval = "30s"
+  timeout = "5s"
+
+# Für dauerhafte SQLite-Persistenz über Neustarts hinweg (sonst siehe render.yaml-Hinweis:
+# beim nächsten Klick auf "Aktualisieren" ist die Liste ohnehin wieder gefüllt):
+# `fly volumes create crawler_data --size 1` und danach hier einkommentieren:
+# [mounts]
+#   source = "crawler_data"
+#   destination = "/app/data"

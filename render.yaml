@@ -1,0 +1,40 @@
+# Render.com Blueprint (https://render.com/docs/blueprint-spec) für ein Ein-Container-Deployment
+# des Ausschreibungs-Crawlers.
+#
+# Liegt am Repository-Root und wird von Render daher direkt als Blueprint erkannt
+# ("New -> Blueprint", dieses Repository verbinden).
+#
+# Bewusst kein Dauerbetrieb (Nutzeranfrage 01.09.2026): CRAWLER_SCHEDULER_ENABLED=false im
+# Dockerfile deaktiviert den periodischen Scheduler fest; Aktualisierung passiert ausschließlich
+# über den "Aktualisieren"-Button im Frontend (POST /api/run-all).
+#
+# Persistenz: ohne bezahlten Disk-Zusatz (Render Free/Starter ohne Persistent Disk) verliert die
+# SQLite-Datenbank ihren Inhalt bei jedem Neustart/Redeploy - beim nächsten Klick auf
+# "Aktualisieren" ist die Ausschreibungsliste aber sofort wieder gefüllt, das passt zum
+# Nutzungsmuster "gelegentlich manuell aktualisieren" ohne Langzeit-Historie. Für dauerhafte
+# Persistenz: Persistent Disk unter /app/data hinzufügen (siehe Render-Doku) oder auf die in
+# docs/schema_postgresql.sql vorbereitete PostgreSQL-Variante wechseln (CRAWLER_DATABASE_URL
+# entsprechend setzen).
+services:
+  - type: web
+    name: ausschreibungscrawler
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    envVars:
+      - key: CRAWLER_SCHEDULER_ENABLED
+        value: "false"
+      - key: CRAWLER_HTTP_REQUEST_DELAY_SECONDS
+        value: "1.5"
+      # Optional: LLM-Nachbewertung von Grenzfällen (Kapitel 4.3) - ohne diesen Key läuft die
+      # Keyword-/CPV-Klassifikation unverändert weiter, dieser Schritt wird nur übersprungen.
+      - key: CRAWLER_ANTHROPIC_API_KEY
+        sync: false
+      # Optional (25.09.2026, API-Absicherung, siehe app/security.py): ohne gesetzten Wert
+      # bleibt die API offen. Für ein öffentlich erreichbares Deployment empfohlen - dann beim
+      # Docker-Build zusätzlich denselben Wert als --build-arg VITE_API_KEY=... mitgeben (siehe
+      # Dockerfile), sonst kann das ausgelieferte Frontend selbst nicht mehr auf die API zugreifen.
+      - key: CRAWLER_API_KEY
+        sync: false
+    healthCheckPath: /api/health
