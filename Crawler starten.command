@@ -63,9 +63,21 @@ if [ ! -f .venv/.installiert ] || [ "$(cat .venv/.installiert)" != "$REQ_STAND" 
   schritt "Python-Pakete installieren (dauert beim ersten Mal ein paar Minuten)"
   .venv/bin/python -m pip install --upgrade pip -q
   .venv/bin/python -m pip install -r requirements.txt -q
-  schritt "Headless-Browser für das DB Bieterportal installieren"
-  .venv/bin/python -m playwright install chromium
   echo "$REQ_STAND" > .venv/.installiert
+  rm -f .venv/.browser-ok
+fi
+
+# Headless-Browser nur für das DB Bieterportal - ein fehlgeschlagener Download (z. B. Timeout
+# beim Playwright-CDN) darf den Start nicht verhindern: alle anderen Portale brauchen ihn nicht.
+# Ohne Erfolgsmarker wird der Download beim nächsten Start einfach erneut versucht.
+if [ ! -f .venv/.browser-ok ]; then
+  schritt "Headless-Browser für das DB Bieterportal installieren"
+  if PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=180000 .venv/bin/python -m playwright install chromium; then
+    touch .venv/.browser-ok
+  else
+    printf '\n\033[33mHinweis: Browser-Download fehlgeschlagen - nur das DB Bieterportal ist betroffen,\n'
+    printf 'alle anderen Portale funktionieren. Beim nächsten Start wird es erneut versucht.\033[0m\n'
+  fi
 fi
 
 if [ ! -f .env ]; then
