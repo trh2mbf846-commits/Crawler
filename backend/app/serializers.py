@@ -36,6 +36,7 @@ def tender_to_out(tender: Tender) -> TenderOut:
         ki_relevanz_begruendung=tender.ki_relevanz_begruendung,
         kategorien=[tc.category.name for tc in tender.kategorien],
         gesamtscore=r.gesamtscore if r else 0.0,
+        moeglicherweise_duplikat_hinweis=tender.moeglicherweise_duplikat_hinweis,
         erfasst_am=tender.erfasst_am,
         zuletzt_geprueft_am=tender.zuletzt_geprueft_am,
     )

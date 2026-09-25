@@ -51,6 +51,12 @@ export function TenderCard({ tender, query = '' }: TenderCardProps) {
         </p>
       ) : null}
 
+      {tender.moeglicherweise_duplikat_hinweis ? (
+        <p className="mt-2 text-xs italic text-ink-faint" title={tender.moeglicherweise_duplikat_hinweis}>
+          ⓘ {tender.moeglicherweise_duplikat_hinweis}
+        </p>
+      ) : null}
+
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <CategoryTags categories={tender.kategorien} />
         <div className="flex items-center gap-3 text-xs text-ink-faint">

@@ -31,6 +31,7 @@ class TenderOut(BaseModel):
     ki_relevanz_begruendung: str | None
     kategorien: list[str]
     gesamtscore: float
+    moeglicherweise_duplikat_hinweis: str | None
     erfasst_am: datetime
     zuletzt_geprueft_am: datetime
 

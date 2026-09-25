@@ -4,8 +4,10 @@
 """
 from __future__ import annotations
 
+import difflib
 import hashlib
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,6 +20,72 @@ TRACKED_FIELDS = (
     "titel", "kurzbeschreibung", "angebotsfrist", "fragenfrist", "verfahrensart",
     "geschaetzter_wert", "status", "vergabestelle",
 )
+
+# Portalübergreifende Duplikaterkennung (Nutzeranfrage 25.09.2026): reine Heuristik, da der
+# dedupe_hash oben bewusst je Portal isoliert ist (Kapitel 5.3) und die bekannte Überschneidung
+# Bekanntmachungsservice/TED/DTVP (docs/portal-notes.md) sonst unsichtbar bliebe. Grenzt die
+# Kandidaten zunächst auf ein Veröffentlichungsdatum-Fenster ein (billig, per Index), bewertet
+# dann Titel-Ähnlichkeit (teuer, daher erst auf der kleinen Kandidatenmenge).
+_DUPLIKAT_DATUM_FENSTER_TAGE = 5
+_DUPLIKAT_KANDIDATEN_LIMIT = 300
+_TITEL_SCHWELLE_MIT_VERGABESTELLE = 0.75
+_TITEL_SCHWELLE_OHNE_VERGABESTELLE = 0.90
+_WORT_MUSTER = re.compile(r"[a-z0-9äöüß]+")
+
+
+def _normalisiere_titel(titel: str) -> str:
+    return " ".join(_WORT_MUSTER.findall(titel.lower()))
+
+
+def _vergabestellen_ueberschneiden_sich(a: str | None, b: str | None) -> bool:
+    if not a or not b:
+        return False
+    a, b = a.lower().strip(), b.lower().strip()
+    return a in b or b in a
+
+
+def _erkenne_cross_portal_duplikat(db: Session, tender: Tender) -> None:
+    if tender.veroeffentlichungsdatum is None:
+        return  # ohne Datum ist das Kandidaten-Zeitfenster unten nicht sinnvoll eingrenzbar
+
+    fenster_start = tender.veroeffentlichungsdatum - timedelta(days=_DUPLIKAT_DATUM_FENSTER_TAGE)
+    fenster_ende = tender.veroeffentlichungsdatum + timedelta(days=_DUPLIKAT_DATUM_FENSTER_TAGE)
+    kandidaten = db.scalars(
+        select(Tender)
+        .where(
+            Tender.portal_id != tender.portal_id,
+            Tender.id != tender.id,
+            Tender.veroeffentlichungsdatum.between(fenster_start, fenster_ende),
+        )
+        .limit(_DUPLIKAT_KANDIDATEN_LIMIT)
+    ).all()
+    if not kandidaten:
+        return
+
+    eigener_titel = _normalisiere_titel(tender.titel)
+    bester_treffer: Tender | None = None
+    beste_aehnlichkeit = 0.0
+    for kandidat in kandidaten:
+        aehnlichkeit = difflib.SequenceMatcher(None, eigener_titel, _normalisiere_titel(kandidat.titel)).ratio()
+        schwelle = (
+            _TITEL_SCHWELLE_MIT_VERGABESTELLE
+            if _vergabestellen_ueberschneiden_sich(tender.vergabestelle, kandidat.vergabestelle)
+            else _TITEL_SCHWELLE_OHNE_VERGABESTELLE
+        )
+        if aehnlichkeit >= schwelle and aehnlichkeit > beste_aehnlichkeit:
+            bester_treffer, beste_aehnlichkeit = kandidat, aehnlichkeit
+
+    if bester_treffer is None:
+        tender.moeglicherweise_duplikat_von = None
+        tender.moeglicherweise_duplikat_hinweis = None
+        return
+
+    tender.moeglicherweise_duplikat_von = bester_treffer.id
+    tender.moeglicherweise_duplikat_hinweis = (
+        f"Vermutlich auch bei {bester_treffer.portal.name} "
+        f"(Titel-Ähnlichkeit {beste_aehnlichkeit * 100:.0f}%) - automatisch erkannt, nicht "
+        "zusammengeführt, da nicht sicher genug für ein automatisches Merge."
+    )
 
 
 def _parse_dt(value) -> datetime | None:
@@ -108,6 +176,11 @@ def run_duplicate(db: Session, job: Job) -> dict:
         db.refresh(existing)
         tender = existing
         ergebnis = "aktualisiert" if veraendert else "unveraendert"
+
+    if ergebnis in ("neu", "aktualisiert"):
+        _erkenne_cross_portal_duplikat(db, tender)
+        db.commit()
+        db.refresh(tender)
 
     if ergebnis in ("neu", "aktualisiert") or tender.ki_relevanz_score is None:
         queue.enqueue(

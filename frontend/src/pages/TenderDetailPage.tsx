@@ -79,6 +79,10 @@ export function TenderDetailPage() {
         ) : null}
 
         {tender.kurzbeschreibung ? <p className="mt-4 text-sm leading-relaxed text-ink">{tender.kurzbeschreibung}</p> : null}
+
+        {tender.moeglicherweise_duplikat_hinweis ? (
+          <p className="mt-4 text-xs italic text-ink-faint">ⓘ {tender.moeglicherweise_duplikat_hinweis}</p>
+        ) : null}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">

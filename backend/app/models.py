@@ -79,6 +79,14 @@ class Tender(Base):
     ki_relevanz_begruendung: Mapped[str | None] = mapped_column(Text, nullable=True)
     ki_relevanz_quelle: Mapped[str | None] = mapped_column(String, nullable=True)  # keyword|cpv|llm
     dedupe_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    # Heuristische, portalübergreifende Duplikaterkennung (Nutzeranfrage 25.09.2026: bekannte
+    # Überschneidung Bekanntmachungsservice/TED/DTVP). Der oben stehende dedupe_hash ist bewusst
+    # je Portal isoliert (Kapitel 5.3) und erkennt daher NICHT, wenn dieselbe Ausschreibung über
+    # mehrere Portale läuft - diese beiden Felder ergänzen das um einen unverbindlichen Hinweis,
+    # ohne Datensätze zusammenzuführen (Ähnlichkeit ist nie sicher genug für ein automatisches
+    # Merge, siehe app/agents/duplicate.py:_erkenne_cross_portal_duplikat).
+    moeglicherweise_duplikat_von: Mapped[str | None] = mapped_column(String, nullable=True)
+    moeglicherweise_duplikat_hinweis: Mapped[str | None] = mapped_column(Text, nullable=True)
     erfasst_am: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     zuletzt_geprueft_am: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

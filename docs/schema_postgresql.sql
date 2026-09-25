@@ -46,12 +46,19 @@ CREATE TABLE tenders (
   ki_relevanz_begruendung   TEXT,      -- Zusatz: Begruendung der Einstufung (Kapitel 20.4 Transparenz)
   ki_relevanz_quelle        TEXT,      -- Zusatz: keyword | cpv | llm
   dedupe_hash               TEXT NOT NULL,
+  -- Zusatz (25.09.2026): heuristischer, portalübergreifender Duplikat-Hinweis (Kapitel 5.3
+  -- dedupe_hash ist bewusst je Portal isoliert, erkennt Überschneidungen zwischen Portalen
+  -- wie Bekanntmachungsservice/TED/DTVP daher nicht - kein FK, da nur ein unverbindlicher
+  -- Hinweis ohne Merge-Garantie, siehe app/agents/duplicate.py).
+  moeglicherweise_duplikat_von     TEXT,
+  moeglicherweise_duplikat_hinweis TEXT,
   erfasst_am                TIMESTAMPTZ NOT NULL DEFAULT now(),
   zuletzt_geprueft_am        TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (portal_id, dedupe_hash)
 );
 CREATE INDEX idx_tenders_frist  ON tenders (angebotsfrist);
 CREATE INDEX idx_tenders_status ON tenders (status);
+CREATE INDEX idx_tenders_veroeffentlichung ON tenders (veroeffentlichungsdatum);
 CREATE INDEX idx_tenders_suche  ON tenders USING GIN (
   to_tsvector('german', coalesce(titel,'') || ' ' ||
               coalesce(kurzbeschreibung,'') || ' ' || coalesce(vergabestelle,'')));

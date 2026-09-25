@@ -52,6 +52,7 @@ export interface Tender {
   ki_relevanz_begruendung: string | null
   kategorien: string[]
   gesamtscore: number
+  moeglicherweise_duplikat_hinweis: string | null
   erfasst_am: string
   zuletzt_geprueft_am: string
 }
