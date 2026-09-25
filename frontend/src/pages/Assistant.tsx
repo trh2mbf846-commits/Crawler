@@ -46,7 +46,7 @@ export function Assistant() {
           { id: crypto.randomUUID(), rolle: 'assistant', text: ergebnis.antwort, tenders: ergebnis.tenders },
         ])
       } catch (err) {
-        setFehler(err instanceof ApiError ? err.message : 'Der KI-Assistent konnte nicht antworten.')
+        setFehler(err instanceof ApiError ? err.message : 'Crawler Kevin konnte nicht antworten.')
       } finally {
         setSenden(false)
       }
@@ -57,16 +57,17 @@ export function Assistant() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-xl font-semibold text-ink">KI-Assistent</h1>
+        <h1 className="text-xl font-semibold text-ink">Crawler Kevin</h1>
         <p className="mt-0.5 text-sm text-ink-muted">
-          Fragen in natürlicher Sprache zu erfassten Ausschreibungen und zum Quellstatus – ergänzt die
-          Übersicht, ersetzt sie nicht. Der Assistent liest nur, er löst keine Läufe aus und ändert keine Daten.
+          Dein KI-Kollege für die Ausschreibungssuche – frag ihn in natürlicher Sprache zu erfassten
+          Ausschreibungen und zum Quellstatus. Ergänzt die Übersicht, ersetzt sie nicht: Kevin liest
+          nur, er löst keine Läufe aus und ändert keine Daten.
         </p>
       </div>
 
       {nichtKonfiguriert ? (
         <div className="rounded-md border border-line bg-surface-sunken px-4 py-3 text-sm text-ink-muted">
-          Der KI-Assistent ist auf diesem Server nicht konfiguriert (kein <code>ANTHROPIC_API_KEY</code> hinterlegt).
+          Crawler Kevin ist auf diesem Server nicht konfiguriert (kein <code>ANTHROPIC_API_KEY</code> hinterlegt).
           Nutze in der Zwischenzeit die normale Suche/Filter in der Übersicht.
         </div>
       ) : null}
@@ -134,7 +135,7 @@ export function Assistant() {
             type="text"
             value={eingabe}
             onChange={(event) => setEingabe(event.target.value)}
-            placeholder="Frage an den KI-Assistenten…"
+            placeholder="Frage an Crawler Kevin…"
             className="focus-ring flex-1 rounded-md border border-line bg-surface px-3 py-2 text-sm placeholder:text-ink-faint"
           />
           <button

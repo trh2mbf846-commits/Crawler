@@ -38,12 +38,12 @@ jeweiligen Connector-Module (`backend/app/agents/connector/*.py`).
 (Connector → Discovery → Analysis → Normalization → Duplicate → AI Classification → Search →
 Source Health), Job-/Eskalations-System, Ranking-Engine, Scheduler (per Konfiguration
 abschaltbar, siehe Deployment unten), REST-API, manueller Aktualisieren-Button (`POST
-/api/run-all`), KI-Assistent (siehe unten) und Frontend (Übersicht, Filter, Suche,
-Detailansicht, Suchprofile, Quellstatus-Dashboard mit Quellen-Übersicht,
-Entscheidungs-Posteingang, KI-Assistent-Tab). 33 automatisierte Tests plus reale Testläufe
+/api/run-all`), KI-Assistent "Crawler Kevin" (siehe unten) und Frontend (Übersicht, Filter,
+Suche, Detailansicht, Suchprofile, Quellstatus-Dashboard mit Quellen-Übersicht,
+Entscheidungs-Posteingang, Crawler-Kevin-Tab). 33 automatisierte Tests plus reale Testläufe
 gegen 7 Live-Portale mit 7306 echten Ausschreibungen.
 
-### KI-Assistent (Update 25.09.2026)
+### KI-Assistent "Crawler Kevin" (Update 25.09.2026)
 
 Nutzeranfrage: "Richtung KI-Agent, aber die Übersicht soll bleiben". Ergänzt - nicht ersetzt -
 die bestehende Übersicht um einen zusätzlichen Tab (`/assistant`, `frontend/src/pages/

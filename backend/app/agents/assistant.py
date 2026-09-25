@@ -1,4 +1,6 @@
-"""KI-Assistent (Nutzeranfrage 25.09.2026: "Richtung KI-Agent, aber die Übersicht soll bleiben").
+"""Crawler Kevin, der KI-Assistent des Crawlers (Nutzeranfrage 25.09.2026: "Richtung KI-Agent,
+
+aber die Übersicht soll bleiben" + "nennen wir ihn Crawler Kevin").
 
 Ergänzt die bestehende Übersicht/Filter/Suche (Kapitel 11) um eine zusätzliche, rein lesende
 Chat-Oberfläche: Vincent stellt eine Frage in natürlicher Sprache ("zeig mir alle KI-relevanten
@@ -33,16 +35,17 @@ logger = logging.getLogger("ausschreibungscrawler.assistant")
 MAX_TOOL_ITERATIONEN = 5
 MAX_SUCHTREFFER = 20
 _NICHT_KONFIGURIERT_HINWEIS = (
-    "Der KI-Assistent ist nicht konfiguriert (kein ANTHROPIC_API_KEY hinterlegt). Nutze in der "
+    "Crawler Kevin ist nicht konfiguriert (kein ANTHROPIC_API_KEY hinterlegt). Nutze in der "
     "Zwischenzeit die normale Suche/Filter in der Übersicht."
 )
-_NICHT_ERREICHBAR_HINWEIS = "Der KI-Assistent ist gerade nicht erreichbar. Bitte versuche es später erneut."
+_NICHT_ERREICHBAR_HINWEIS = "Crawler Kevin ist gerade nicht erreichbar. Bitte versuche es später erneut."
 _ZU_KOMPLEX_HINWEIS = "Die Anfrage war zu komplex, um sie in der verfügbaren Zeit zu beantworten. Bitte präzisiere die Frage."
 
 SYSTEM_TEMPLATE = (
-    "Du bist der KI-Assistent des Ausschreibungs-Crawlers (Kapitel 17-25 der Handlungsanweisung, "
-    '"Search Agent Operating System"). Du beantwortest Fragen von Vincent zu erfassten '
-    "öffentlichen Ausschreibungen und zum Status der Datenquellen.\n\n"
+    'Du bist "Crawler Kevin", der KI-Kollege im Ausschreibungs-Crawler (Kapitel 17-25 der '
+    'Handlungsanweisung, "Search Agent Operating System"). Du beantwortest Fragen von Vincent zu '
+    "erfassten öffentlichen Ausschreibungen und zum Status der Datenquellen. Stell dich nur vor, "
+    "wenn danach gefragt wird - sonst antworte direkt in der Sache.\n\n"
     "Regeln:\n"
     "- Antworte ausschließlich auf Basis der Werkzeug-Ergebnisse. Erfinde keine Ausschreibungen, "
     "Fristen oder Details, die nicht in den Werkzeug-Ergebnissen stehen.\n"
@@ -216,5 +219,5 @@ def run_assistant_chat(
 
         return AssistantResult(_ZU_KOMPLEX_HINWEIS, list(gefundene_tenders.values()))
     except Exception:
-        logger.exception("KI-Assistent: Anfrage fehlgeschlagen")
+        logger.exception("Crawler Kevin: Anfrage fehlgeschlagen")
         return AssistantResult(_NICHT_ERREICHBAR_HINWEIS)
