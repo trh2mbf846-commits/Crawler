@@ -32,9 +32,12 @@ services:
       - key: CRAWLER_ANTHROPIC_API_KEY
         sync: false
       # Optional (25.09.2026, API-Absicherung, siehe app/security.py): ohne gesetzten Wert
-      # bleibt die API offen. Für ein öffentlich erreichbares Deployment empfohlen - dann beim
-      # Docker-Build zusätzlich denselben Wert als --build-arg VITE_API_KEY=... mitgeben (siehe
-      # Dockerfile), sonst kann das ausgelieferte Frontend selbst nicht mehr auf die API zugreifen.
+      # bleibt die API offen. Für ein öffentlich erreichbares Deployment empfohlen - dann
+      # VITE_API_KEY auf DENSELBEN Wert setzen: Render reicht Umgebungsvariablen beim
+      # Docker-Build als Build-Args durch (siehe ARG VITE_API_KEY im Dockerfile), sonst kann das
+      # ausgelieferte Frontend selbst nicht mehr auf die API zugreifen.
       - key: CRAWLER_API_KEY
+        sync: false
+      - key: VITE_API_KEY
         sync: false
     healthCheckPath: /api/health
