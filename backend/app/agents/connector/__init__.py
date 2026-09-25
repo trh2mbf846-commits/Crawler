@@ -6,6 +6,7 @@ from app.agents.connector.itdz_berlin import ItdzBerlinConnector
 from app.agents.connector.oeffentlichevergabe import OeffentlicheVergabeConnector
 from app.agents.connector.pending import make_pending_connector
 from app.agents.connector.ted import TedConnector
+from app.agents.connector.vergabe_bayern import VergabeBayernConnector
 from app.agents.connector.vergabekooperation_berlin import VergabekooperationBerlinConnector
 
 CONNECTORS: dict[str, type[BaseConnector]] = {
@@ -146,6 +147,22 @@ ZUSATZPORTALE: list[dict] = [
         ),
     ),
     dict(
+        slug="vergabe-bayern",
+        robots_status="geprueft_ok",
+        name="Vergabeplattform Bayern (vergabe.bayern.de)",
+        base_url="https://www.vergabe.bayern.de/veroeffentlichungen/auftragsbekanntmachungen/index.html",
+        betreiber="Bayerisches Staatsministerium für Wohnen, Bau und Verkehr (RIB/iTWO-Plattform)",
+        intervall_minuten=360,
+        hinweis=(
+            "Geprüft 25.09.2026 (Nutzeranfrage \"können wir mehr Portale dazu fügen?\"): "
+            "vergabe.bayern.de bettet seine Bekanntmachungen aus der RIB/iTWO-Plattform "
+            "(meinauftrag.rib.de) ein - derselben Software-Familie, auf die ITDZ Berlin nur extern "
+            "verlinkt. robots.txt dort erlaubt automatisierten Zugriff vollständig (\"Allow: /\"), "
+            "Liste und Detailseiten sind ohne Login öffentlich (nur die Angebotsabgabe selbst "
+            "verlangt ein Bieterkonto). Connector implementiert."
+        ),
+    ),
+    dict(
         slug="foerderdatenbank-ki",
         robots_status="geprueft_einschraenkung",
         name="AI-Förderprogramme (Förderdatenbank BMWK/BMBF)",
@@ -169,6 +186,7 @@ _ECHTE_ZUSATZ_CONNECTOREN: dict[str, type[BaseConnector]] = {
     DtvpConnector.slug: DtvpConnector,
     EvergabeBundConnector.slug: EvergabeBundConnector,
     OeffentlicheVergabeConnector.slug: OeffentlicheVergabeConnector,
+    VergabeBayernConnector.slug: VergabeBayernConnector,
 }
 CONNECTORS.update(_ECHTE_ZUSATZ_CONNECTOREN)
 

@@ -68,7 +68,7 @@ PFLICHT_PORTALE = [
 # Zusatzportale mit fertig implementiertem, echtem Connector (Kapitel 9.1: "gut machbar" laut
 # Recherche vom 04.09.2026) - laufen automatisch im Scheduler. Alle anderen ZUSATZPORTALE
 # bleiben inaktiv (blockiert/eingeschränkt/noch nicht umgesetzt, siehe deren tos_hinweis).
-AKTIVE_ZUSATZ_SLUGS = {"ted", "dtvp", "evergabe-bund", "oeffentlichevergabe"}
+AKTIVE_ZUSATZ_SLUGS = {"ted", "dtvp", "evergabe-bund", "oeffentlichevergabe", "vergabe-bayern"}
 
 
 def run_seed(db: Session) -> None:

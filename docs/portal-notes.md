@@ -115,6 +115,28 @@ diesem Datensatz auf - die Quelle deckt also einen Teil der EU-schwellenwertigen
 Bekanntmachungen von zwei der bewusst nicht implementierten Portale indirekt ab, ganz ohne
 diese Portale selbst anzufragen.
 
+## Zusatzportal: Vergabeplattform Bayern (Nutzeranfrage 25.09.2026 "können wir mehr Portale dazu fügen?")
+
+`vergabe.bayern.de` bettet seine Auftragsbekanntmachungen per `<iframe>` direkt aus der
+zugrunde liegenden Vergabesoftware **RIB/iTWO** ein (`meinauftrag.rib.de`, Bayern-Kundenkennung
+`filter=604283`) - derselben Plattform, auf die auch ITDZ Berlin nur extern verlinkt (siehe
+oben), dort aber bewusst nicht selbst abgerufen wurde. Live geprüft am 25.09.2026:
+
+- robots.txt von `meinauftrag.rib.de`: `User-agent: * / Allow: /` - vollständig offen.
+  `vergabe.bayern.de` selbst hat kein robots.txt (HTTP 404 = keine Einschränkung).
+- Liste (Startseite + Offset-Pagination per `POST /public/nextPublications`) und Detailseiten
+  (`/public/publications/<ID>`) sind vollständig ohne Login abrufbar - nur die Angebotsabgabe
+  selbst (`/tender/details/<ID>#documents`) verlangt ein Bieterkonto, was Kapitel 10.3 nicht
+  auslöst (reines Einsehen bleibt öffentlich).
+- Technische Besonderheit: Pagination benötigt sowohl das Session-Cookie als auch ein
+  CSRF-Token - und zwar **zusätzlich als Formularfeld** (`YII_CSRF_TOKEN`), nicht nur als
+  `X-CSRF-Token`-Header (sonst HTTP 200 mit einer HTML-Fehlerseite statt JSON). Live verifiziert:
+  402 Ausschreibungen komplett und ohne Duplikate abgerufen.
+- **Ausblick:** RIB/iTWO wird laut Recherche als White-Label-Plattform von mehreren
+  Bundesländern genutzt (ähnlich wie cosinex für DTVP/Brandenburg) - weitere Bundesländer mit
+  eigener `filter`-ID wären ein nahliegender nächster Schritt für noch mehr Abdeckung, wurden
+  aber in dieser Runde nicht zusätzlich recherchiert.
+
 Für **Vergabe24**, **subreport ELViS** und **cosinex** wurde ebenfalls nach einer offiziellen
 Alternative gesucht (GovData/CKAN-API stichwortbasiert durchsucht) - kein Treffer, da alle drei
 reine kommerzielle Anbieter ohne eigenen Open-Data-Export sind. Für die **Förderdatenbank**
