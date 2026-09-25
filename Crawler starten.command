@@ -3,8 +3,8 @@
 #
 # Beim ersten Start wird alles Nötige eingerichtet (Python-Umgebung, Headless-Browser,
 # Frontend-Build), danach startet das nur noch den Server und öffnet http://localhost:8000.
-# Voraussetzung: Python 3.11+ (python.org) und Node.js 22 (nodejs.org), siehe README
-# "Lokal auf dem Mac". Beenden: dieses Fenster schließen oder Ctrl+C.
+# Voraussetzung: Python 3.11+ (python.org) und Node.js 22 (nodejs.org), optional Ollama
+# (ollama.com) für Crawler Kevin, siehe README "Lokal auf dem Mac". Beenden: dieses Fenster schließen oder Ctrl+C.
 #
 # Bewusst kompatibel mit der macOS-Standard-Bash 3.2 (keine Bash-4-Features).
 
@@ -102,9 +102,58 @@ if [ ! -f .env ]; then
   # Aktualisieren-Button startet Läufe, genau wie im Render-/Docker-Deployment.
   cat > .env <<'EOF'
 CRAWLER_SCHEDULER_ENABLED=false
-# Für den Chat "Crawler Kevin" die Raute entfernen und den eigenen Schlüssel eintragen:
+# Crawler Kevin läuft kostenlos über Ollama (https://ollama.com). Optional stattdessen Claude
+# (kostenpflichtig, bessere Antworten): Raute entfernen und eigenen Schlüssel eintragen:
 # CRAWLER_ANTHROPIC_API_KEY=sk-ant-...
+# Anderes lokales Modell erzwingen (Standard: qwen3:8b, auf Macs mit 8 GB qwen3:4b):
+# CRAWLER_OLLAMA_MODEL=qwen3:8b
 EOF
+fi
+
+# --- Crawler Kevin: kostenloses lokales Sprachmodell über Ollama ---------------------------
+# Nutzerwunsch 25.09.2026. Ist in backend/.env ein Anthropic-Key eingetragen, nutzt Kevin Claude
+# und Ollama wird übersprungen. Alles hier ist optional - ohne Ollama startet der Crawler
+# trotzdem, nur Kevin meldet dann, dass er nicht erreichbar ist.
+if ! grep -Eq '^[[:space:]]*CRAWLER_ANTHROPIC_API_KEY=.+' .env; then
+  OLLAMA=""
+  if command -v ollama >/dev/null 2>&1; then
+    OLLAMA="ollama"
+  elif [ -x "/Applications/Ollama.app/Contents/Resources/ollama" ]; then
+    OLLAMA="/Applications/Ollama.app/Contents/Resources/ollama"
+  fi
+
+  if [ -z "$OLLAMA" ]; then
+    printf '\n\033[33mHinweis: Für Crawler Kevin (kostenlos) bitte Ollama von https://ollama.com installieren\n'
+    printf 'und den Crawler danach neu starten. Alles andere funktioniert auch ohne.\033[0m\n'
+  else
+    # Modell nach Arbeitsspeicher: 8B braucht ca. 6 GB frei, auf 8-GB-Macs das kleinere 4B.
+    # Eigene Wahl in backend/.env (CRAWLER_OLLAMA_MODEL=...) hat Vorrang.
+    MODELL="$(sed -n 's/^[[:space:]]*CRAWLER_OLLAMA_MODEL=//p' .env | tail -1)"
+    if [ -z "$MODELL" ]; then
+      RAM_BYTES="$(sysctl -n hw.memsize 2>/dev/null || awk '/MemTotal/ {print $2 * 1024}' /proc/meminfo 2>/dev/null || echo 0)"
+      if [ "${RAM_BYTES:-0}" -ge 15000000000 ] 2>/dev/null; then MODELL="qwen3:8b"; else MODELL="qwen3:4b"; fi
+      export CRAWLER_OLLAMA_MODEL="$MODELL"
+    fi
+
+    if ! curl -fs http://localhost:11434/api/version >/dev/null 2>&1; then
+      schritt "Ollama starten"
+      open -a Ollama 2>/dev/null || (nohup "$OLLAMA" serve >/dev/null 2>&1 &)
+      for _ in $(seq 1 30); do
+        curl -fs http://localhost:11434/api/version >/dev/null 2>&1 && break
+        sleep 1
+      done
+    fi
+
+    if curl -fs http://localhost:11434/api/version >/dev/null 2>&1; then
+      if ! "$OLLAMA" list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qx "$MODELL"; then
+        schritt "Sprachmodell $MODELL für Crawler Kevin herunterladen (einmalig, einige GB)"
+        "$OLLAMA" pull "$MODELL" || printf '\033[33mHinweis: Download fehlgeschlagen - wird beim nächsten Start erneut versucht.\033[0m\n'
+      fi
+      echo "Crawler Kevin nutzt das lokale Modell $MODELL (kostenlos)."
+    else
+      printf '\033[33mHinweis: Ollama ließ sich nicht starten - bitte die Ollama-App einmal von Hand öffnen.\033[0m\n'
+    fi
+  fi
 fi
 
 # --- Frontend bauen (nur wenn sich der Frontend-Code geändert hat) -----------------------

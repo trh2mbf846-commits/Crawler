@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-5"
 
+    # Crawler Kevin ohne API-Kosten (Nutzerwunsch 25.09.2026: "Kevins Antworten kostenlos"):
+    # lokales Sprachmodell über Ollama (https://ollama.com), siehe app/agents/assistant.py.
+    # "auto" = Claude, wenn CRAWLER_ANTHROPIC_API_KEY gesetzt ist, sonst Ollama.
+    kevin_anbieter: str = "auto"  # auto | anthropic | ollama
+    ollama_url: str = "http://localhost:11434"
+    ollama_model: str = "qwen3:8b"
+    ollama_timeout_seconds: float = 300.0
+
     http_user_agent: str = "AusschreibungsCrawlerBot/0.1 (+Kontakt: siehe Portal-Konfiguration)"
     http_request_delay_seconds: float = 1.5  # Rate-Limiting, Kapitel 9.1
 

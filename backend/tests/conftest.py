@@ -3,6 +3,9 @@ import tempfile
 
 _tmp_dir = tempfile.mkdtemp(prefix="ausschreibungscrawler-test-")
 os.environ["CRAWLER_DATABASE_URL"] = f"sqlite:///{_tmp_dir}/test.db"
+# Tests dürfen nie ein echtes, lokal laufendes Ollama ansprechen - Ollama-Tests setzen den
+# Anbieter gezielt und nutzen einen httpx.MockTransport (siehe test_assistant_ollama.py).
+os.environ["CRAWLER_KEVIN_ANBIETER"] = "anthropic"
 
 import pytest  # noqa: E402
 

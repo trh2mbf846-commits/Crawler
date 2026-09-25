@@ -19,7 +19,6 @@ from sqlalchemy.orm import Session
 
 from app.agents.assistant import execute_assistant_action, run_assistant_chat
 from app.agents.digest import build_daily_digest
-from app.config import settings
 from app.db import get_db
 from app.models import AssistantPreferences
 from app.schemas import (
@@ -51,7 +50,7 @@ def assistant_chat(payload: AssistantChatIn, db: Session = Depends(get_db)) -> A
     )
     return AssistantChatOut(
         antwort=ergebnis.antwort,
-        verfuegbar=bool(settings.anthropic_api_key),
+        verfuegbar=ergebnis.verfuegbar,
         tenders=[tender_to_out(t) for t in ergebnis.tenders],
         vorschlag=vorschlag,
     )

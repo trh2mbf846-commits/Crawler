@@ -68,8 +68,20 @@ Technisch ein Tool-Use-Agent auf Basis der Anthropic API (`backend/app/agents/as
   Logik), `ausschreibung_merken` setzt ein neues `gemerkt`/`merk_notiz`-Feld am Tender-Datensatz
   (in der Übersicht als ★-Badge sichtbar).
 
-Ohne konfigurierten `CRAWLER_ANTHROPIC_API_KEY` (wie in dieser Entwicklungsumgebung) liefert der
-Chat-Endpunkt einen klaren Hinweis statt eines Fehlers. Live end-to-end verifiziert (Playwright,
+**Kostenlos über Ollama (Update 25.09.2026, Nutzerwunsch "Kevins Antworten kostenlos"):** ohne
+`CRAWLER_ANTHROPIC_API_KEY` nutzt Kevin automatisch ein lokales Sprachmodell über Ollama
+(`CRAWLER_KEVIN_ANBIETER=auto|anthropic|ollama`, `CRAWLER_OLLAMA_URL`, `CRAWLER_OLLAMA_MODEL`,
+Default `qwen3:8b`), mit denselben Werkzeugen und derselben Bestätigungspflicht. Weil kleine
+lokale Modelle im Test ohne Werkzeugaufruf eine Ausschreibung frei erfunden, Kategorien nicht
+exakt geschrieben und IDs erfunden haben, gibt es dafür drei Absicherungen: strengere
+Zusatzregeln im Systemprompt, einmaliges Nachhaken bei einer Antwort ohne jeden
+Werkzeugaufruf, und Aktionsvorschläge mit unbekannter ID/unbekanntem Portal werden dem Modell
+als Fehler zurückgemeldet statt Vincent vorgelegt. Unabhängig vom Anbieter: ungefähre
+Kategorienamen werden zugeordnet ("KI" -> "KI & Machine Learning"), Suchergebnisse enthalten die
+Kategorien, der Systemprompt das heutige Datum. Real gegen Ollama getestet (qwen3:8b auf
+Demo-Daten: Antworten ausschließlich aus echten Treffern). Läuft Ollama nicht oder fehlt das
+Modell, sagt Kevin konkret, was zu tun ist. Ist Claude erzwungen, aber kein Key gesetzt, liefert
+der Chat-Endpunkt einen klaren Hinweis statt eines Fehlers. Live end-to-end verifiziert (Playwright,
 Chat-Antwort per Route-Interception simuliert, da kein API-Key verfügbar ist, aber Bestätigung
 und Ausführung real gegen den echten Server): alle drei Aktionen bestätigt und geprüft, dass sie
 tatsächlich etwas verändert haben (Tender wirklich `gemerkt`, Suchprofil wirklich in der DB,
@@ -237,7 +249,13 @@ doppelklicken. Beim ersten Start richtet das Skript alles ein (ca. 5 Minuten), d
 
 - Holt bei jedem Start per `git pull` automatisch den neuesten Stand.
 - Legt `backend/.env` mit `CRAWLER_SCHEDULER_ENABLED=false` an (nur der Aktualisieren-Button
-  crawlt); für "Crawler Kevin" dort `CRAWLER_ANTHROPIC_API_KEY` eintragen und neu starten.
+  crawlt).
+- **Crawler Kevin kostenlos:** Ist **Ollama** (https://ollama.com, normale Mac-App) installiert,
+  startet das Skript es automatisch und lädt beim ersten Mal ein lokales Sprachmodell
+  (`qwen3:8b`, auf Macs mit 8 GB Arbeitsspeicher `qwen3:4b`, einige GB). Kevin läuft dann ohne
+  API-Kosten komplett auf dem Mac. Wer stattdessen Claude möchte (kostenpflichtig, bessere
+  Antworten): `CRAWLER_ANTHROPIC_API_KEY` in `backend/.env` eintragen - dann wird Ollama
+  übersprungen.
 - Daten bleiben in `backend/data/` zwischen den Starts erhalten.
 
 ## Schnellstart

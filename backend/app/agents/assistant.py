@@ -18,22 +18,29 @@ Zwei Werkzeug-Arten (Nutzeranfrage 25.09.2026 "Kevin darf alle drei Sachen"):
   execute_assistant_action(...) wirklich aus. Kevin trifft also nie selbstständig eine Aktion mit
   echter Wirkung (ausgelöster Portal-Lauf, neues Suchprofil, geänderter Datensatz).
 
-Ohne konfigurierten ANTHROPIC_API_KEY liefert run_assistant_chat(...) einen klaren Hinweis statt
-eines Fehlers (gleiches Prinzip wie call_llm_json in app/prompts.py) - die restliche Anwendung
-bleibt davon unberührt.
+Zwei austauschbare Sprachmodell-Anbieter mit identischen Werkzeugen und identischer
+Bestätigungslogik (settings.kevin_anbieter, Default "auto"):
+- Claude über die Anthropic API, wenn CRAWLER_ANTHROPIC_API_KEY gesetzt ist (kostet pro Anfrage).
+- Sonst ein lokales Modell über Ollama (Nutzerwunsch 25.09.2026: "Kevins Antworten kostenlos"),
+  angesprochen über Ollamas native /api/chat-Schnittstelle mit Tool-Calling. Läuft Ollama nicht
+  oder fehlt das Modell, liefert Kevin einen konkreten Hinweis, wie das zu beheben ist, statt
+  eines Fehlers - die restliche Anwendung bleibt davon unberührt.
 """
 from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import date
+
+import httpx
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import AssistantPreferences, Portal, SearchProfile, Tender
+from app.models import AssistantPreferences, Category, Portal, SearchProfile, Tender
 from app.serializers import portal_to_health_out
 from app.tender_queries import search_tenders
 
@@ -42,8 +49,18 @@ logger = logging.getLogger("ausschreibungscrawler.assistant")
 MAX_TOOL_ITERATIONEN = 5
 MAX_SUCHTREFFER = 20
 _NICHT_KONFIGURIERT_HINWEIS = (
-    "Crawler Kevin ist nicht konfiguriert (kein ANTHROPIC_API_KEY hinterlegt). Nutze in der "
+    "Crawler Kevin ist nicht konfiguriert (Anbieter Claude gewählt, aber kein ANTHROPIC_API_KEY "
+    "hinterlegt - kostenlose Alternative: CRAWLER_KEVIN_ANBIETER=ollama). Nutze in der "
     "Zwischenzeit die normale Suche/Filter in der Übersicht."
+)
+_OLLAMA_NICHT_GESTARTET_HINWEIS = (
+    "Crawler Kevin nutzt ein kostenloses lokales Sprachmodell über Ollama, aber Ollama läuft gerade "
+    "nicht. Bitte die Ollama-App öffnen (oder von https://ollama.com installieren) und die Frage "
+    "erneut stellen."
+)
+_OLLAMA_MODELL_FEHLT_HINWEIS = (
+    "Das Sprachmodell „{modell}“ ist in Ollama noch nicht heruntergeladen. Einfach den Crawler neu "
+    "starten (das Startskript lädt es automatisch) oder im Terminal ausführen: ollama pull {modell}"
 )
 _NICHT_ERREICHBAR_HINWEIS = "Crawler Kevin ist gerade nicht erreichbar. Bitte versuche es später erneut."
 _ZU_KOMPLEX_HINWEIS = "Die Anfrage war zu komplex, um sie in der verfügbaren Zeit zu beantworten. Bitte präzisiere die Frage."
@@ -68,7 +85,10 @@ SYSTEM_TEMPLATE = (
     "eines dieser drei Werkzeuge auf.\n\n"
     "Vincents Prioritäten (versetze dich in seine Position, wenn du Treffer einordnest oder "
     "Vorschläge machst - ohne dass er das jedes Mal wiederholen muss):\n{prioritaeten}\n\n"
-    "Aktuell aktive Portale (Slug - Name):\n{portale}"
+    "Heute ist {heute} - rechne relative Angaben wie \"in den nächsten 14 Tagen\" von diesem "
+    "Datum aus in ein ISO-Datum (YYYY-MM-DD) um.\n\n"
+    "Aktuell aktive Portale (Slug - Name):\n{portale}\n\n"
+    "Kategorien (für den Filter kategorien exakt so schreiben):\n{kategorien}"
 )
 _KEINE_PRIORITAETEN_HINWEIS = "(noch keine hinterlegt - frag ihn gerne danach, oder er trägt sie unter „Präferenzen“ ein)"
 
@@ -184,6 +204,7 @@ class AssistantResult:
     antwort: str
     tenders: list[Tender] = field(default_factory=list)
     vorschlag: AssistantActionProposal | None = None
+    verfuegbar: bool = True
 
 
 @dataclass
@@ -221,18 +242,47 @@ def _build_system_prompt(db: Session) -> str:
     zeilen = "\n".join(f"- {p.slug}: {p.name}" for p in portale)
     praeferenzen = db.get(AssistantPreferences, "singleton")
     return SYSTEM_TEMPLATE.format(
+        heute=date.today().isoformat(),
         portale=zeilen or "(keine aktiven Portale)",
+        kategorien="\n".join(f"- {name}" for name in _kategorie_namen(db)) or "(keine)",
         prioritaeten=_formatiere_prioritaeten(praeferenzen),
     )
 
 
+def _kategorie_namen(db: Session) -> list[str]:
+    return list(db.scalars(select(Category.name).order_by(Category.name)).all())
+
+
+def _ordne_kategorien_zu(db: Session, angefragt: list[str] | None) -> tuple[list[str] | None, list[str]]:
+    """Ordnet ungefähre Kategorienamen den echten zu ("KI" -> "KI & Machine Learning").
+
+    Sprachmodelle (vor allem kleine lokale) schreiben Kategorien oft nicht exakt - ein exakter
+    Filter lieferte dann stillschweigend 0 Treffer. Nicht zuordenbare Namen werden weggelassen und
+    zurückgemeldet, statt die ganze Suche leer laufen zu lassen.
+    """
+    if not angefragt:
+        return None, []
+    echte = _kategorie_namen(db)
+    zugeordnet: list[str] = []
+    unbekannt: list[str] = []
+    for name in angefragt:
+        suche = str(name).strip().lower()
+        treffer = [k for k in echte if k.lower() == suche] or [k for k in echte if suche and suche in k.lower()]
+        if treffer:
+            zugeordnet.extend(k for k in treffer if k not in zugeordnet)
+        else:
+            unbekannt.append(str(name))
+    return (zugeordnet or None), unbekannt
+
+
 def _tool_suche_ausschreibungen(db: Session, tool_input: dict, gefundene: dict[str, Tender]) -> dict:
     limit = max(1, min(int(tool_input.get("limit") or 10), MAX_SUCHTREFFER))
+    kategorien, unbekannte_kategorien = _ordne_kategorien_zu(db, tool_input.get("kategorien"))
     items, total = search_tenders(
         db,
         q=tool_input.get("q"),
         portal=tool_input.get("portal_slugs"),
-        kategorie=tool_input.get("kategorien"),
+        kategorie=kategorien,
         ki_relevanz_min=tool_input.get("ki_relevanz_min"),
         frist_bis=_parse_iso_date(tool_input.get("frist_bis")),
         status=tool_input.get("status"),
@@ -242,7 +292,13 @@ def _tool_suche_ausschreibungen(db: Session, tool_input: dict, gefundene: dict[s
     )
     for t in items:
         gefundene[t.id] = t
+    hinweise = {}
+    if unbekannte_kategorien:
+        hinweise["ignorierte_unbekannte_kategorien"] = unbekannte_kategorien
+    if total == 0 and any(tool_input.get(k) for k in ("q", "kategorien", "ki_relevanz_min", "frist_bis", "status", "portal_slugs")):
+        hinweise["hinweis"] = "Keine Treffer mit diesen Filtern - ggf. mit weniger Filtern erneut suchen."
     return {
+        **hinweise,
         "gesamttreffer": total,
         "treffer": [
             {
@@ -252,6 +308,7 @@ def _tool_suche_ausschreibungen(db: Session, tool_input: dict, gefundene: dict[s
                 "portal": t.portal.name,
                 "angebotsfrist": t.angebotsfrist.isoformat() if t.angebotsfrist else None,
                 "ki_relevanz": t.ki_relevanz_score,
+                "kategorien": [tk.category.name for tk in t.kategorien],
                 "kurzbeschreibung": (t.kurzbeschreibung or "")[:200],
             }
             for t in items
@@ -325,12 +382,22 @@ def _beschreibe_aktion(db: Session, name: str, tool_input: dict) -> str:
     return f"Kevin möchte das Werkzeug „{name}“ ausführen."
 
 
+def kevin_anbieter() -> str:
+    """Welcher Sprachmodell-Anbieter tatsächlich genutzt wird: "anthropic" oder "ollama"."""
+    gewuenscht = (settings.kevin_anbieter or "auto").strip().lower()
+    if gewuenscht in ("anthropic", "ollama"):
+        return gewuenscht
+    return "anthropic" if settings.anthropic_api_key else "ollama"
+
+
 def run_assistant_chat(
-    db: Session, nachricht: str, verlauf: list[dict] | None = None, client=None
+    db: Session, nachricht: str, verlauf: list[dict] | None = None, client=None, ollama_http=None
 ) -> AssistantResult:
+    if client is None and kevin_anbieter() == "ollama":
+        return _run_ollama_chat(db, nachricht, verlauf, ollama_http)
     if client is None:
         if not settings.anthropic_api_key:
-            return AssistantResult(_NICHT_KONFIGURIERT_HINWEIS)
+            return AssistantResult(_NICHT_KONFIGURIERT_HINWEIS, verfuegbar=False)
         import anthropic
 
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -395,6 +462,167 @@ def run_assistant_chat(
     except Exception:
         logger.exception("Crawler Kevin: Anfrage fehlgeschlagen")
         return AssistantResult(_NICHT_ERREICHBAR_HINWEIS)
+
+
+# --- Ollama (lokales, kostenloses Sprachmodell) ------------------------------------------------
+
+_OLLAMA_TOOLS = [
+    {
+        "type": "function",
+        "function": {"name": t["name"], "description": t["description"], "parameters": t["input_schema"]},
+    }
+    for t in ALLE_TOOLS
+]
+_DENK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+# Zusätzliche Regeln nur für lokale Modelle: im Test (25.09.2026, qwen3:8b) beschrieb das Modell
+# ohne jeden Werkzeugaufruf eine frei erfundene Ausschreibung und filterte ungefragt auf
+# bestimmte Portale - Claude braucht diese Nachschärfung nicht.
+_OLLAMA_ZUSATZREGELN = (
+    "\n\nZusätzliche Regeln (streng einhalten):\n"
+    "- Bevor du irgendetwas über Ausschreibungen oder Portale sagst, rufe IMMER zuerst ein "
+    "Werkzeug auf (suche_ausschreibungen bzw. quellstatus). Du kennst keine Ausschreibungen aus "
+    "dem Gedächtnis.\n"
+    "- Setze Filter nur, wenn die Frage sie verlangt: portal_slugs nur bei Frage nach einem "
+    "bestimmten Portal, ki_relevanz_min nur bei ausdrücklicher Frage nach starker Relevanz.\n"
+    "- Findest du nichts, suche einmal mit weniger Filtern erneut, bevor du antwortest.\n"
+    "- tender_id für ausschreibung_merken nur aus einem Suchergebnis dieses Gesprächs übernehmen."
+)
+_OHNE_WERKZEUG_NACHHAKEN = (
+    "Du hast noch kein Werkzeug benutzt. Falls die Frage Ausschreibungen oder Portale betrifft, "
+    "rufe jetzt zuerst das passende Werkzeug auf und antworte erst danach - nicht aus dem Gedächtnis. "
+    "Falls nicht (z. B. Begrüßung), antworte einfach erneut."
+)
+
+
+class _OllamaModellFehlt(Exception):
+    pass
+
+
+def _ollama_anfrage(http: httpx.Client, messages: list[dict]) -> dict:
+    nutzlast = {
+        "model": settings.ollama_model,
+        "messages": messages,
+        "tools": _OLLAMA_TOOLS,
+        "stream": False,
+        "options": {"temperature": 0.2},
+        # Denk-Modus (z. B. Qwen3) aus: auf einem Mac sonst deutlich langsamer, für Werkzeugwahl +
+        # kurze Zusammenfassung nicht nötig. Ältere Ollama-Versionen/Modelle ohne Denk-Modus
+        # lehnen das Feld ggf. ab - dann einmal ohne erneut versuchen.
+        "think": False,
+    }
+    antwort = http.post("/api/chat", json=nutzlast)
+    if antwort.status_code == 400 and "think" in antwort.text.lower():
+        nutzlast.pop("think")
+        antwort = http.post("/api/chat", json=nutzlast)
+    if antwort.status_code == 404:
+        raise _OllamaModellFehlt()
+    antwort.raise_for_status()
+    return antwort.json().get("message") or {}
+
+
+def _ollama_tool_argumente(roh) -> dict:
+    if isinstance(roh, dict):
+        return roh
+    if isinstance(roh, str) and roh.strip():
+        try:
+            geparst = json.loads(roh)
+            return geparst if isinstance(geparst, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def _bereinige_text(text: str | None) -> str:
+    return _DENK_BLOCK.sub("", text or "").strip()
+
+
+def _vorschlag_fehler(db: Session, name: str, tool_input: dict) -> str | None:
+    """Prüft einen Aktionsvorschlag auf offensichtlich ungültige Angaben, bevor er Vincent
+    vorgelegt wird. None = in Ordnung."""
+    if name == "ausschreibung_merken" and db.get(Tender, tool_input.get("tender_id") or "") is None:
+        return (
+            "Unbekannte tender_id. Erst mit suche_ausschreibungen suchen und die id aus einem "
+            "Treffer verwenden."
+        )
+    if name == "aktualisieren_starten" and tool_input.get("portal_slug") and _portal_von_slug(db, tool_input["portal_slug"]) is None:
+        return "Unbekannter portal_slug - nur Slugs aus der Portal-Liste im Systemprompt verwenden, oder weglassen für alle."
+    if name == "suchprofil_anlegen" and not str(tool_input.get("name") or "").strip():
+        return "Das Suchprofil braucht einen Namen."
+    return None
+
+
+def _run_ollama_chat(
+    db: Session, nachricht: str, verlauf: list[dict] | None, http: httpx.Client | None
+) -> AssistantResult:
+    messages: list[dict] = [{"role": "system", "content": _build_system_prompt(db) + _OLLAMA_ZUSATZREGELN}]
+    for eintrag in verlauf or []:
+        rolle = "assistant" if eintrag.get("rolle") == "assistant" else "user"
+        messages.append({"role": rolle, "content": eintrag.get("text", "")})
+    messages.append({"role": "user", "content": nachricht})
+
+    gefundene_tenders: dict[str, Tender] = {}
+    eigener_client = http is None
+    if eigener_client:
+        http = httpx.Client(base_url=settings.ollama_url, timeout=settings.ollama_timeout_seconds)
+    try:
+        werkzeug_genutzt = False
+        nachgehakt = False
+        for _ in range(MAX_TOOL_ITERATIONEN):
+            antwort = _ollama_anfrage(http, messages)
+            tool_calls = antwort.get("tool_calls") or []
+            text = _bereinige_text(antwort.get("content"))
+            if not tool_calls and not werkzeug_genutzt and not nachgehakt:
+                # Schutz gegen erfundene Antworten: einmal nachhaken, bevor eine Antwort ohne
+                # jeden Werkzeugaufruf durchgeht.
+                nachgehakt = True
+                messages.append({"role": "assistant", "content": antwort.get("content") or ""})
+                messages.append({"role": "user", "content": _OHNE_WERKZEUG_NACHHAKEN})
+                continue
+            if not tool_calls:
+                return AssistantResult(text or "(keine Antwort)", list(gefundene_tenders.values()))
+            werkzeug_genutzt = True
+
+            aufrufe = [
+                ((tc.get("function") or {}).get("name", ""), _ollama_tool_argumente((tc.get("function") or {}).get("arguments")))
+                for tc in tool_calls
+            ]
+            schreibend = next(((n, a) for n, a in aufrufe if n in _WRITE_TOOL_NAMEN), None)
+            fehler = _vorschlag_fehler(db, *schreibend) if schreibend is not None else None
+            if fehler is not None:
+                # Erfundene ID o. ä. (kleine lokale Modelle): nicht Vincent zur Bestätigung
+                # vorlegen, sondern dem Modell zurückmelden, damit es erst richtig sucht.
+                messages.append({"role": "assistant", "content": antwort.get("content") or "", "tool_calls": tool_calls})
+                messages.append({"role": "tool", "tool_name": schreibend[0], "content": json.dumps({"fehler": fehler}, ensure_ascii=False)})
+                continue
+            if schreibend is not None:
+                # Wie bei Claude: nie direkt ausführen, nur zur Bestätigung vorschlagen.
+                name, tool_input = schreibend
+                vorschlag = AssistantActionProposal(
+                    name=name, input=tool_input, beschreibung=_beschreibe_aktion(db, name, tool_input)
+                )
+                return AssistantResult(text or vorschlag.beschreibung, list(gefundene_tenders.values()), vorschlag)
+
+            messages.append({"role": "assistant", "content": antwort.get("content") or "", "tool_calls": tool_calls})
+            for name, tool_input in aufrufe:
+                ergebnis = _execute_tool(db, name, tool_input, gefundene_tenders)
+                messages.append({
+                    "role": "tool",
+                    "tool_name": name,
+                    "content": json.dumps(ergebnis, ensure_ascii=False, default=str),
+                })
+
+        return AssistantResult(_ZU_KOMPLEX_HINWEIS, list(gefundene_tenders.values()))
+    except httpx.ConnectError:
+        return AssistantResult(_OLLAMA_NICHT_GESTARTET_HINWEIS)
+    except _OllamaModellFehlt:
+        return AssistantResult(_OLLAMA_MODELL_FEHLT_HINWEIS.format(modell=settings.ollama_model))
+    except Exception:
+        logger.exception("Crawler Kevin (Ollama): Anfrage fehlgeschlagen")
+        return AssistantResult(_NICHT_ERREICHBAR_HINWEIS)
+    finally:
+        if eigener_client:
+            http.close()
 
 
 def execute_assistant_action(db: Session, name: str, tool_input: dict) -> AssistantActionResult:

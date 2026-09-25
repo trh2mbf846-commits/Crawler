@@ -292,8 +292,9 @@ export function Assistant() {
 
       {nichtKonfiguriert ? (
         <div className="rounded-md border border-line bg-surface-sunken px-4 py-3 text-sm text-ink-muted">
-          Crawler Kevin ist auf diesem Server nicht konfiguriert (kein <code>ANTHROPIC_API_KEY</code> hinterlegt).
-          Nutze in der Zwischenzeit die normale Suche/Filter in der Übersicht.
+          Crawler Kevin ist auf diesem Server nicht konfiguriert: Es ist Claude als Anbieter gewählt, aber kein{' '}
+          <code>CRAWLER_ANTHROPIC_API_KEY</code> hinterlegt. Kostenlose Alternative: <code>CRAWLER_KEVIN_ANBIETER=ollama</code>{' '}
+          mit Ollama (ollama.com). Nutze in der Zwischenzeit die normale Suche/Filter in der Übersicht.
         </div>
       ) : null}
 
