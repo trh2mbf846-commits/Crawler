@@ -35,13 +35,20 @@ done
 [ -n "$PYTHON" ] || fehler "Python 3.11 oder neuer fehlt. Bitte von https://www.python.org/downloads/ installieren und dieses Skript erneut starten."
 command -v npm >/dev/null 2>&1 || fehler "Node.js fehlt. Bitte die LTS-Version von https://nodejs.org installieren und dieses Skript erneut starten."
 
-if lsof -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
-  printf 'Port %s ist schon belegt - läuft der Crawler bereits in einem anderen Fenster?\n' "$PORT"
-  printf 'Öffne %s im Browser.\n' "$URL"
-  open "$URL" 2>/dev/null || true
-  printf '\nFenster mit Enter schließen.'
-  read -r _
-  exit 0
+# Läuft noch ein alter Crawler (z. B. Fenster nicht richtig geschlossen), würde sonst weiter die
+# alte Version antworten und Updates kämen nie an - daher den alten Crawler beenden und neu starten.
+ALTE_PIDS="$(lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true)"
+if [ -n "$ALTE_PIDS" ]; then
+  if curl -fs "$URL/api/health" >/dev/null 2>&1; then
+    schritt "Beende den noch laufenden Crawler, damit die neueste Version startet"
+    kill $ALTE_PIDS 2>/dev/null || true
+    for _ in $(seq 1 20); do
+      lsof -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1 || break
+      sleep 0.5
+    done
+  else
+    fehler "Port $PORT ist von einem anderen Programm belegt. Bitte dieses Programm beenden und den Crawler erneut starten."
+  fi
 fi
 
 # --- Updates holen (optional, Fehler z. B. ohne Internet werden ignoriert) ---------------
@@ -149,6 +156,9 @@ if ! grep -Eq '^[[:space:]]*CRAWLER_ANTHROPIC_API_KEY=.+' .env; then
         schritt "Sprachmodell $MODELL für Crawler Kevin herunterladen (einmalig, einige GB)"
         "$OLLAMA" pull "$MODELL" || printf '\033[33mHinweis: Download fehlgeschlagen - wird beim nächsten Start erneut versucht.\033[0m\n'
       fi
+      # Modell schon jetzt im Hintergrund in den Speicher laden (dauert beim ersten Mal etwas),
+      # damit Kevins erste Antwort nicht zusätzlich darauf warten muss.
+      (curl -fs http://localhost:11434/api/generate -d "{\"model\": \"$MODELL\", \"keep_alive\": \"60m\"}" >/dev/null 2>&1 &)
       echo "Crawler Kevin nutzt das lokale Modell $MODELL (kostenlos)."
     else
       printf '\033[33mHinweis: Ollama ließ sich nicht starten - bitte die Ollama-App einmal von Hand öffnen.\033[0m\n'

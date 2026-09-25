@@ -7,17 +7,19 @@ import {
   sendAssistantMessage,
   updateAssistantPreferences,
 } from '../api/client'
-import type { AssistantActionProposal, AssistantMessage, AssistantPreferences, Tender } from '../api/types'
+import type { AssistantPreferences } from '../api/types'
 import { CATEGORIES } from '../api/types'
 import { TenderCard } from '../components/TenderCard'
-
-interface ChatEntry extends AssistantMessage {
-  id: string
-  tenders?: Tender[]
-  vorschlag?: AssistantActionProposal | null
-}
-
-type AktionStatus = { status: 'ausgefuehrt' | 'abgelehnt' | 'fehler'; meldung?: string }
+import {
+  type AktionStatus,
+  type ChatEntry,
+  haengeAn,
+  ladeChat,
+  laufendeKevinAnfrage,
+  loescheChat,
+  merkeLaufendeAnfrage,
+  speichereChat,
+} from '../utils/kevinChat'
 
 const BEISPIELE = [
   'Welche KI-relevanten Ausschreibungen laufen in Bayern aus?',
@@ -175,26 +177,49 @@ function PraeferenzenPanel({ onClose }: { onClose: () => void }) {
 }
 
 export function Assistant() {
-  const [verlauf, setVerlauf] = useState<ChatEntry[]>([])
+  // Verlauf kommt aus dem Browser-Speicher (utils/kevinChat.ts) - bleibt beim Tab-Wechsel und
+  // Neustart erhalten, bis er über "Chat löschen" bewusst geleert wird.
+  const [verlauf, setVerlauf] = useState<ChatEntry[]>(() => ladeChat().verlauf)
   const [eingabe, setEingabe] = useState('')
-  const [senden, setSenden] = useState(false)
+  const [senden, setSenden] = useState(() => laufendeKevinAnfrage() !== null)
   const [fehler, setFehler] = useState<string | null>(null)
   const [nichtKonfiguriert, setNichtKonfiguriert] = useState(false)
-  const [aktionStatus, setAktionStatus] = useState<Record<string, AktionStatus>>({})
+  const [aktionStatus, setAktionStatus] = useState<Record<string, AktionStatus>>(() => ladeChat().aktionStatus)
   const [aktionLaeuft, setAktionLaeuft] = useState<string | null>(null)
   const [praeferenzenOffen, setPraeferenzenOffen] = useState(false)
   const endeRef = useRef<HTMLDivElement>(null)
-  const digestGeladen = useRef(false)
+  const aktiv = useRef(true)
+
+  useEffect(() => {
+    aktiv.current = true
+    return () => {
+      aktiv.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    speichereChat({ verlauf, aktionStatus })
+  }, [verlauf, aktionStatus])
 
   useEffect(() => {
     endeRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [verlauf, aktionStatus])
 
+  // Hat Kevin noch geantwortet, während ein anderer Tab offen war? Dann nach Abschluss nachladen.
   useEffect(() => {
-    if (digestGeladen.current) return
-    digestGeladen.current = true
+    const anfrage = laufendeKevinAnfrage()
+    if (!anfrage) return
+    anfrage.finally(() => {
+      if (!aktiv.current) return
+      setVerlauf(ladeChat().verlauf)
+      setSenden(false)
+    })
+  }, [])
+
+  const ladeKurzbericht = useCallback(() => {
     fetchAssistantDigest()
       .then((digest) => {
+        if (!aktiv.current) return
         setVerlauf((prev) =>
           prev.length > 0
             ? prev
@@ -207,6 +232,20 @@ export function Assistant() {
       })
   }, [])
 
+  // Kurzbericht nur für einen leeren Chat - ein gespeicherter Verlauf wird nicht überschrieben.
+  useEffect(() => {
+    if (ladeChat().verlauf.length === 0 && laufendeKevinAnfrage() === null) ladeKurzbericht()
+  }, [ladeKurzbericht])
+
+  const chatLoeschen = useCallback(() => {
+    if (!window.confirm('Den gesamten Chat mit Crawler Kevin löschen? Das lässt sich nicht rückgängig machen.')) return
+    loescheChat()
+    setVerlauf([])
+    setAktionStatus({})
+    setFehler(null)
+    ladeKurzbericht()
+  }, [ladeKurzbericht])
+
   const absenden = useCallback(
     async (text: string) => {
       const nachricht = text.trim()
@@ -215,30 +254,37 @@ export function Assistant() {
       const userEintrag: ChatEntry = { id: crypto.randomUUID(), rolle: 'user', text: nachricht }
       const bisherigerVerlauf = verlauf.map(({ rolle, text }) => ({ rolle, text }))
       setVerlauf((prev) => [...prev, userEintrag])
+      speichereChat({ verlauf: [...verlauf, userEintrag], aktionStatus })
       setEingabe('')
       setSenden(true)
       setFehler(null)
 
-      try {
-        const ergebnis = await sendAssistantMessage(nachricht, bisherigerVerlauf)
-        setNichtKonfiguriert(!ergebnis.verfuegbar)
-        setVerlauf((prev) => [
-          ...prev,
-          {
+      // Die Antwort wird direkt in den Speicher geschrieben - so geht sie auch dann nicht verloren,
+      // wenn inzwischen ein anderer Tab geöffnet wurde (Komponente nicht mehr sichtbar).
+      const anfrage = (async () => {
+        try {
+          const ergebnis = await sendAssistantMessage(nachricht, bisherigerVerlauf)
+          const chat = haengeAn({
             id: crypto.randomUUID(),
             rolle: 'assistant',
             text: ergebnis.antwort,
             tenders: ergebnis.tenders,
             vorschlag: ergebnis.vorschlag,
-          },
-        ])
-      } catch (err) {
-        setFehler(err instanceof ApiError ? err.message : 'Crawler Kevin konnte nicht antworten.')
-      } finally {
-        setSenden(false)
-      }
+          })
+          if (aktiv.current) {
+            setNichtKonfiguriert(!ergebnis.verfuegbar)
+            setVerlauf(chat.verlauf)
+          }
+        } catch (err) {
+          if (aktiv.current) setFehler(err instanceof ApiError ? err.message : 'Crawler Kevin konnte nicht antworten.')
+        } finally {
+          if (aktiv.current) setSenden(false)
+        }
+      })()
+      merkeLaufendeAnfrage(anfrage)
+      await anfrage
     },
-    [senden, verlauf]
+    [senden, verlauf, aktionStatus]
   )
 
   const bestaetigen = useCallback(async (eintrag: ChatEntry) => {
@@ -279,13 +325,23 @@ export function Assistant() {
             aber nur vor, ausgeführt wird erst nach deiner Bestätigung.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setPraeferenzenOffen((prev) => !prev)}
-          className="focus-ring shrink-0 rounded-md border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-muted hover:bg-surface-sunken hover:text-ink"
-        >
-          ⚙ Präferenzen
-        </button>
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            onClick={chatLoeschen}
+            disabled={senden || verlauf.length === 0}
+            className="focus-ring rounded-md border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-muted hover:bg-surface-sunken hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            🗑 Chat löschen
+          </button>
+          <button
+            type="button"
+            onClick={() => setPraeferenzenOffen((prev) => !prev)}
+            className="focus-ring rounded-md border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-muted hover:bg-surface-sunken hover:text-ink"
+          >
+            ⚙ Präferenzen
+          </button>
+        </div>
       </div>
 
       {praeferenzenOffen ? <PraeferenzenPanel onClose={() => setPraeferenzenOffen(false)} /> : null}

@@ -12,6 +12,7 @@ import pytest
 
 from app.agents.assistant import (
     _OLLAMA_MODELL_FEHLT_HINWEIS,
+    _OLLAMA_ZU_LANGSAM_HINWEIS,
     _OLLAMA_NICHT_GESTARTET_HINWEIS,
     _ZU_KOMPLEX_HINWEIS,
     kevin_anbieter,
@@ -185,3 +186,12 @@ def test_ollama_begruessung_kommt_nach_einmaligem_nachhaken_durch(db):
         {"role": "assistant", "content": "Hallo! Wie kann ich helfen?"},
     ])
     assert run_assistant_chat(db, "Hallo", ollama_http=http).antwort == "Hallo! Wie kann ich helfen?"
+
+
+def test_ollama_zeitueberschreitung_liefert_verstaendlichen_hinweis(db):
+    def handler(request):
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    http = httpx.Client(base_url="http://ollama.test", transport=httpx.MockTransport(handler))
+    ergebnis = run_assistant_chat(db, "Frage", ollama_http=http)
+    assert ergebnis.antwort == _OLLAMA_ZU_LANGSAM_HINWEIS.format(modell=settings.ollama_model)

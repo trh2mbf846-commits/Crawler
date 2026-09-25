@@ -58,6 +58,12 @@ _OLLAMA_NICHT_GESTARTET_HINWEIS = (
     "nicht. Bitte die Ollama-App öffnen (oder von https://ollama.com installieren) und die Frage "
     "erneut stellen."
 )
+_OLLAMA_ZU_LANGSAM_HINWEIS = (
+    "Das lokale Sprachmodell „{modell}“ hat zu lange für eine Antwort gebraucht. Beim allerersten "
+    "Aufruf nach dem Start muss es erst geladen werden - bitte die Frage einfach noch einmal "
+    "stellen. Passiert das dauerhaft, ist der Rechner für dieses Modell zu langsam: in "
+    "backend/.env z. B. CRAWLER_OLLAMA_MODEL=qwen3:4b eintragen und den Crawler neu starten."
+)
 _OLLAMA_MODELL_FEHLT_HINWEIS = (
     "Das Sprachmodell „{modell}“ ist in Ollama noch nicht heruntergeladen. Einfach den Crawler neu "
     "starten (das Startskript lädt es automatisch) oder im Terminal ausführen: ollama pull {modell}"
@@ -619,6 +625,8 @@ def _run_ollama_chat(
         return AssistantResult(_ZU_KOMPLEX_HINWEIS, list(gefundene_tenders.values()))
     except httpx.ConnectError:
         return AssistantResult(_OLLAMA_NICHT_GESTARTET_HINWEIS)
+    except httpx.TimeoutException:
+        return AssistantResult(_OLLAMA_ZU_LANGSAM_HINWEIS.format(modell=settings.ollama_model))
     except _OllamaModellFehlt:
         return AssistantResult(_OLLAMA_MODELL_FEHLT_HINWEIS.format(modell=settings.ollama_model))
     except Exception:
