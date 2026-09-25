@@ -87,6 +87,11 @@ class Tender(Base):
     # Merge, siehe app/agents/duplicate.py:_erkenne_cross_portal_duplikat).
     moeglicherweise_duplikat_von: Mapped[str | None] = mapped_column(String, nullable=True)
     moeglicherweise_duplikat_hinweis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Von Vincent (manuell oder über Crawler Kevin, Nutzeranfrage 25.09.2026 "Kevin darf alle
+    # drei Sachen") als interessant markiert - rein persönliche Merkliste, keine fachliche
+    # Bewertung wie ki_relevanz_score.
+    gemerkt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    merk_notiz: Mapped[str | None] = mapped_column(Text, nullable=True)
     erfasst_am: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     zuletzt_geprueft_am: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

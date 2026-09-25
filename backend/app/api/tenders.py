@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import TenderHistory
+from app.models import Tender, TenderHistory
 from app.schemas import HistoryEntryOut, TenderDetailOut, TenderListOut
 from app.serializers import tender_to_detail_out, tender_to_out
 from app.tender_queries import search_tenders

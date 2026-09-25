@@ -37,6 +37,8 @@ def tender_to_out(tender: Tender) -> TenderOut:
         kategorien=[tc.category.name for tc in tender.kategorien],
         gesamtscore=r.gesamtscore if r else 0.0,
         moeglicherweise_duplikat_hinweis=tender.moeglicherweise_duplikat_hinweis,
+        gemerkt=tender.gemerkt,
+        merk_notiz=tender.merk_notiz,
         erfasst_am=tender.erfasst_am,
         zuletzt_geprueft_am=tender.zuletzt_geprueft_am,
     )

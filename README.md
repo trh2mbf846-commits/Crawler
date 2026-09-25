@@ -40,30 +40,45 @@ Source Health), Job-/Eskalations-System, Ranking-Engine, Scheduler (per Konfigur
 abschaltbar, siehe Deployment unten), REST-API, manueller Aktualisieren-Button (`POST
 /api/run-all`), KI-Assistent "Crawler Kevin" (siehe unten) und Frontend (Übersicht, Filter,
 Suche, Detailansicht, Suchprofile, Quellstatus-Dashboard mit Quellen-Übersicht,
-Entscheidungs-Posteingang, Crawler-Kevin-Tab). 33 automatisierte Tests plus reale Testläufe
+Entscheidungs-Posteingang, Crawler-Kevin-Tab). 48 automatisierte Tests plus reale Testläufe
 gegen 7 Live-Portale mit 7306 echten Ausschreibungen.
 
 ### KI-Assistent "Crawler Kevin" (Update 25.09.2026)
 
-Nutzeranfrage: "Richtung KI-Agent, aber die Übersicht soll bleiben". Ergänzt - nicht ersetzt -
-die bestehende Übersicht um einen zusätzlichen Tab (`/assistant`, `frontend/src/pages/
+Nutzeranfrage: "Richtung KI-Agent, aber die Übersicht soll bleiben", dann "Nennen wir ihn Crawler
+Kevin", dann "Kevin darf alle drei Sachen [mitarbeiten statt nur lesen]". Ergänzt - nicht ersetzt
+- die bestehende Übersicht um einen zusätzlichen Tab (`/assistant`, `frontend/src/pages/
 Assistant.tsx`): eine Chat-Oberfläche, in der Fragen in natürlicher Sprache zu erfassten
 Ausschreibungen und zum Quellstatus gestellt werden können (z. B. "welche KI-relevanten
 Ausschreibungen in Bayern laufen in den nächsten 14 Tagen aus?").
 
 Technisch ein Tool-Use-Agent auf Basis der Anthropic API (`backend/app/agents/assistant.py`,
-`POST /api/assistant/chat`): Claude entscheidet selbst, ob und welches der beiden Werkzeuge
-(`suche_ausschreibungen`, `quellstatus`) es für eine Antwort braucht, ruft es auf und fasst das
-Ergebnis zusammen. Beide Werkzeuge nutzen dieselbe, bereits geprüfte Such-/Health-Logik wie die
-REST-API (aus `api/tenders.py` in `app/tender_queries.py` herausgelöst, damit Chat und normale
-Suche nicht auseinanderlaufen). Bewusst **keine schreibenden Werkzeuge** - der Assistent löst
-keine Läufe aus und ändert keine Daten, er beantwortet nur Fragen zum vorhandenen Bestand.
+`POST /api/assistant/chat`), mit zwei Werkzeug-Arten:
+
+- **Lesend** (`suche_ausschreibungen`, `quellstatus`): werden sofort ausgeführt, über dieselbe,
+  bereits geprüfte Such-/Health-Logik wie die REST-API (aus `api/tenders.py` in
+  `app/tender_queries.py` herausgelöst, damit Chat und normale Suche nicht auseinanderlaufen).
+- **Schreibend** (`aktualisieren_starten`, `suchprofil_anlegen`, `ausschreibung_merken`): werden
+  **nie automatisch ausgeführt**. Ruft Kevin eines davon auf, bricht die Tool-Schleife ab und der
+  Vorschlag geht als Klartext-Beschreibung ans Frontend - erst ein expliziter
+  "Bestätigen"-Klick führt ihn über `POST /assistant/actions/execute` wirklich aus ("Ablehnen"
+  verwirft ihn folgenlos). `aktualisieren_starten` nutzt dieselbe Hintergrund-Lauf-Infrastruktur
+  wie der Aktualisieren-Button (`app/api/run.py:start_run`, jetzt auch für ein einzelnes Portal
+  aufrufbar), `suchprofil_anlegen` legt ein echtes Suchprofil an (`app/api/search_profiles.py`-
+  Logik), `ausschreibung_merken` setzt ein neues `gemerkt`/`merk_notiz`-Feld am Tender-Datensatz
+  (in der Übersicht als ★-Badge sichtbar).
 
 Ohne konfigurierten `CRAWLER_ANTHROPIC_API_KEY` (wie in dieser Entwicklungsumgebung) liefert der
-Endpunkt einen klaren Hinweis statt eines Fehlers - live per Browser-Test verifiziert (Screenshot-
-Verifikation: Übersicht bleibt unverändert Startseite, neuer Tab funktioniert, Fallback-Hinweis
-erscheint korrekt). Die eigentliche Tool-Use-Schleife ist mit einem eingeschleusten Fake-Client
-automatisiert getestet (`tests/test_assistant.py`), da diese Umgebung selbst keinen API-Key hat.
+Chat-Endpunkt einen klaren Hinweis statt eines Fehlers. Live end-to-end verifiziert (Playwright,
+Chat-Antwort per Route-Interception simuliert, da kein API-Key verfügbar ist, aber Bestätigung
+und Ausführung real gegen den echten Server): alle drei Aktionen bestätigt und geprüft, dass sie
+tatsächlich etwas verändert haben (Tender wirklich `gemerkt`, Suchprofil wirklich in der DB,
+ITDZ-Berlin-Lauf wirklich und erfolgreich durchgelaufen). Dabei einen echten Regressions-Bug
+gefunden und behoben: der `tender_queries`-Refactor hatte versehentlich den `Tender`-Import aus
+`api/tenders.py` entfernt - `GET /api/tenders/{id}` war dadurch kaputt (500), aber kein
+bestehender Test hatte die HTTP-Schicht dieses Endpunkts abgedeckt. Als Konsequenz neue
+`tests/test_api_smoke.py`: mindestens ein durchgehender HTTP-Aufruf pro Router, damit ein
+kaputter Import künftig schon im schnellen Testlauf auffällt statt erst im Browser.
 
 ### Neues Portal: Vergabeplattform Bayern (Update 25.09.2026)
 

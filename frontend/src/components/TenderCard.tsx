@@ -31,6 +31,14 @@ export function TenderCard({ tender, query = '' }: TenderCardProps) {
           <div className="mb-1.5 flex flex-wrap items-center gap-2">
             <PortalBadge name={tender.portal.name} />
             <KiBadge score={tender.ki_relevanz_score} />
+            {tender.gemerkt ? (
+              <span
+                className="inline-flex items-center gap-1 rounded-full bg-brand-light px-2 py-0.5 text-xs font-medium text-brand"
+                title={tender.merk_notiz ?? 'Gemerkt'}
+              >
+                ★ Gemerkt
+              </span>
+            ) : null}
           </div>
           <h3 className="text-base font-semibold leading-snug text-ink">
             <Link to={`/tenders/${tender.id}`} className="focus-ring rounded hover:text-brand">

@@ -32,6 +32,8 @@ class TenderOut(BaseModel):
     kategorien: list[str]
     gesamtscore: float
     moeglicherweise_duplikat_hinweis: str | None
+    gemerkt: bool
+    merk_notiz: str | None
     erfasst_am: datetime
     zuletzt_geprueft_am: datetime
 
@@ -153,7 +155,24 @@ class AssistantChatIn(BaseModel):
     verlauf: list[AssistantMessageIn] = []
 
 
+class AssistantActionProposalOut(BaseModel):
+    name: str
+    input: dict
+    beschreibung: str
+
+
 class AssistantChatOut(BaseModel):
     antwort: str
     verfuegbar: bool
     tenders: list[TenderOut]
+    vorschlag: AssistantActionProposalOut | None = None
+
+
+class AssistantActionIn(BaseModel):
+    name: str
+    input: dict = {}
+
+
+class AssistantActionOut(BaseModel):
+    erfolg: bool
+    meldung: str

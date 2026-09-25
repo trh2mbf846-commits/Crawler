@@ -6,9 +6,11 @@ from app.agents.assistant import (
     _ZU_KOMPLEX_HINWEIS,
     _tool_quellstatus,
     _tool_suche_ausschreibungen,
+    execute_assistant_action,
     run_assistant_chat,
 )
 from app.agents.duplicate import run_duplicate
+from app.models import SearchProfile, Tender
 
 
 class FakeTextBlock:
@@ -142,3 +144,67 @@ def test_run_assistant_chat_faengt_api_fehler_ab(db):
 
 def test_max_tool_iterationen_ist_begrenzt():
     assert 1 <= MAX_TOOL_ITERATIONEN <= 10
+
+
+def test_schreibendes_werkzeug_wird_nur_vorgeschlagen_nicht_ausgefuehrt(db, portal):
+    fake_client = FakeClientSequence([
+        FakeResponse("tool_use", [FakeToolUseBlock("t1", "aktualisieren_starten", {"portal_slug": portal.slug})]),
+    ])
+
+    ergebnis = run_assistant_chat(db, "Aktualisiere bitte das Testportal", client=fake_client)
+
+    assert ergebnis.vorschlag is not None
+    assert ergebnis.vorschlag.name == "aktualisieren_starten"
+    assert portal.name in ergebnis.vorschlag.beschreibung
+    # Kein zweiter API-Aufruf nötig gewesen (FakeMessagesSequence hätte sonst IndexError geworfen) -
+    # die Schleife ist also wirklich nach dem Vorschlag abgebrochen, nicht in eine zweite Runde gegangen.
+
+
+def test_execute_aktualisieren_starten_lehnt_unbekanntes_portal_ab(db):
+    ergebnis = execute_assistant_action(db, "aktualisieren_starten", {"portal_slug": "nicht-vorhanden"})
+
+    assert ergebnis.erfolg is False
+    assert "nicht gefunden" in ergebnis.meldung
+
+
+def test_execute_suchprofil_anlegen_legt_profil_an(db, portal):
+    ergebnis = execute_assistant_action(
+        db, "suchprofil_anlegen",
+        {"name": "KI in Bayern", "keywords": ["Künstliche Intelligenz"], "portal_slugs": [portal.slug]},
+    )
+
+    assert ergebnis.erfolg is True
+    profile = db.query(SearchProfile).filter(SearchProfile.name == "KI in Bayern").first()
+    assert profile is not None
+    assert profile.portale == [portal.id]
+    assert profile.keywords == ["Künstliche Intelligenz"]
+
+
+def test_execute_suchprofil_anlegen_ohne_namen_schlaegt_fehl(db):
+    ergebnis = execute_assistant_action(db, "suchprofil_anlegen", {"name": ""})
+
+    assert ergebnis.erfolg is False
+    assert db.query(SearchProfile).count() == 0
+
+
+def test_execute_ausschreibung_merken_setzt_flag_und_notiz(db, portal):
+    tender_id = _angelegte_ausschreibung(db, portal)
+
+    ergebnis = execute_assistant_action(db, "ausschreibung_merken", {"tender_id": tender_id, "notiz": "Für Q4 vormerken"})
+
+    assert ergebnis.erfolg is True
+    tender = db.get(Tender, tender_id)
+    assert tender.gemerkt is True
+    assert tender.merk_notiz == "Für Q4 vormerken"
+
+
+def test_execute_ausschreibung_merken_unbekannte_id_schlaegt_fehl(db):
+    ergebnis = execute_assistant_action(db, "ausschreibung_merken", {"tender_id": "existiert-nicht"})
+
+    assert ergebnis.erfolg is False
+
+
+def test_execute_unbekannte_aktion_schlaegt_fehl(db):
+    ergebnis = execute_assistant_action(db, "loesche_alles", {})
+
+    assert ergebnis.erfolg is False

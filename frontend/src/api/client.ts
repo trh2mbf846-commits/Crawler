@@ -1,4 +1,5 @@
 import type {
+  AssistantActionResult,
   AssistantChatResult,
   AssistantMessage,
   Escalation,
@@ -168,5 +169,12 @@ export function sendAssistantMessage(nachricht: string, verlauf: AssistantMessag
   return request<AssistantChatResult>('/assistant/chat', {
     method: 'POST',
     body: JSON.stringify({ nachricht, verlauf }),
+  })
+}
+
+export function executeAssistantAction(name: string, input: Record<string, unknown>): Promise<AssistantActionResult> {
+  return request<AssistantActionResult>('/assistant/actions/execute', {
+    method: 'POST',
+    body: JSON.stringify({ name, input }),
   })
 }

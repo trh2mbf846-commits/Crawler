@@ -79,10 +79,13 @@ def _run_ein_portal(portal_id: str, portal_name: str, portal_slug: str) -> dict:
                 _state["aktuelle_portale"].remove(portal_name)
 
 
-def _run_all_worker() -> None:
+def _run_all_worker(portal_ids: list[str] | None = None) -> None:
     db = SessionLocal()
     try:
-        portale = list(db.scalars(select(Portal).where(Portal.aktiv.is_(True)).order_by(Portal.name)))
+        query = select(Portal).where(Portal.aktiv.is_(True)).order_by(Portal.name)
+        if portal_ids:
+            query = query.where(Portal.id.in_(portal_ids))
+        portale = list(db.scalars(query))
     finally:
         db.close()
 
@@ -100,11 +103,13 @@ def _run_all_worker() -> None:
             _state["beendet_am"] = datetime.utcnow()
 
 
-@router.post("/run-all", response_model=RunAllStatusOut)
-def run_all() -> RunAllStatusOut:
-    """Stößt einen Aktualisieren-Lauf für alle aktiven Portale an (Aktualisieren-Button) - alle
+def start_run(portal_ids: list[str] | None = None) -> RunAllStatusOut:
+    """Stößt einen Aktualisieren-Lauf an - für alle aktiven Portale (portal_ids=None) oder nur
 
-    Portale laufen parallel, damit der Lauf trotz wachsender Quellenzahl zügig fertig wird.
+    für die übergebenen. Gemeinsame Grundlage für den Aktualisieren-Button (POST /run-all) UND
+    für Crawler Kevins "aktualisieren_starten"-Werkzeug (Nutzeranfrage 25.09.2026) - ein einziger
+    In-Memory-Laufzustand, egal wer den Lauf angestoßen hat, damit der Button in der Übersicht
+    auch einen von Kevin gestarteten Lauf korrekt als laufend anzeigt.
     """
     with _lock:
         if _state["laeuft"]:
@@ -115,10 +120,19 @@ def run_all() -> RunAllStatusOut:
         _state["aktuelle_portale"] = []
         _state["ergebnisse"] = []
 
-    thread = threading.Thread(target=_run_all_worker, daemon=True)
+    thread = threading.Thread(target=_run_all_worker, args=(portal_ids,), daemon=True)
     thread.start()
 
     return _status_out()
+
+
+@router.post("/run-all", response_model=RunAllStatusOut)
+def run_all() -> RunAllStatusOut:
+    """Stößt einen Aktualisieren-Lauf für alle aktiven Portale an (Aktualisieren-Button) - alle
+
+    Portale laufen parallel, damit der Lauf trotz wachsender Quellenzahl zügig fertig wird.
+    """
+    return start_run()
 
 
 @router.get("/run-all/status", response_model=RunAllStatusOut)

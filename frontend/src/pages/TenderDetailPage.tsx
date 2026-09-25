@@ -52,6 +52,11 @@ export function TenderDetailPage() {
           <PortalBadge name={tender.portal.name} />
           <StatusBadge status={tender.status} />
           <KiBadge score={tender.ki_relevanz_score} />
+          {tender.gemerkt ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-brand-light px-2 py-0.5 text-xs font-medium text-brand">
+              ★ Gemerkt
+            </span>
+          ) : null}
         </div>
         <h1 className="mt-3 text-2xl font-semibold text-ink">{tender.titel}</h1>
         <p className="mt-1 text-sm text-ink-muted">
@@ -82,6 +87,12 @@ export function TenderDetailPage() {
 
         {tender.moeglicherweise_duplikat_hinweis ? (
           <p className="mt-4 text-xs italic text-ink-faint">ⓘ {tender.moeglicherweise_duplikat_hinweis}</p>
+        ) : null}
+
+        {tender.merk_notiz ? (
+          <p className="mt-4 rounded-md bg-brand-light px-3 py-2 text-sm text-brand">
+            <span className="font-semibold">Notiz:</span> {tender.merk_notiz}
+          </p>
         ) : null}
       </div>
 

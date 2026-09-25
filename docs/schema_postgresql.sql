@@ -52,6 +52,10 @@ CREATE TABLE tenders (
   -- Hinweis ohne Merge-Garantie, siehe app/agents/duplicate.py).
   moeglicherweise_duplikat_von     TEXT,
   moeglicherweise_duplikat_hinweis TEXT,
+  -- Zusatz (25.09.2026): persönliche Merkliste, von Vincent manuell oder über den KI-Assistenten
+  -- "Crawler Kevin" gesetzt (mit Bestätigung, kein automatisches Handeln ohne Rückfrage).
+  gemerkt                   BOOLEAN NOT NULL DEFAULT FALSE,
+  merk_notiz                 TEXT,
   erfasst_am                TIMESTAMPTZ NOT NULL DEFAULT now(),
   zuletzt_geprueft_am        TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (portal_id, dedupe_hash)

@@ -53,6 +53,8 @@ export interface Tender {
   kategorien: string[]
   gesamtscore: number
   moeglicherweise_duplikat_hinweis: string | null
+  gemerkt: boolean
+  merk_notiz: string | null
   erfasst_am: string
   zuletzt_geprueft_am: string
 }
@@ -144,10 +146,22 @@ export interface AssistantMessage {
   text: string
 }
 
+export interface AssistantActionProposal {
+  name: string
+  input: Record<string, unknown>
+  beschreibung: string
+}
+
 export interface AssistantChatResult {
   antwort: string
   verfuegbar: boolean
   tenders: Tender[]
+  vorschlag: AssistantActionProposal | null
+}
+
+export interface AssistantActionResult {
+  erfolg: boolean
+  meldung: string
 }
 
 export interface TenderQuery {

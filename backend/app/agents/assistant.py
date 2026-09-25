@@ -2,14 +2,21 @@
 
 aber die Übersicht soll bleiben" + "nennen wir ihn Crawler Kevin").
 
-Ergänzt die bestehende Übersicht/Filter/Suche (Kapitel 11) um eine zusätzliche, rein lesende
-Chat-Oberfläche: Vincent stellt eine Frage in natürlicher Sprache ("zeig mir alle KI-relevanten
-Ausschreibungen in Bayern mit Frist in den nächsten 14 Tagen"), Claude entscheidet per Tool-Use,
-welche der beiden Werkzeuge (Ausschreibungssuche, Quellstatus) es dafür braucht, ruft sie über die
-bereits bestehende, geprüfte Such-/Health-Logik ab und fasst das Ergebnis zusammen. Bewusst KEINE
-schreibenden Werkzeuge (kein Auto-Anstoßen eines Laufs, kein Ändern von Datensätzen) - der
-Assistent ergänzt die Übersicht, ersetzt sie nicht, und trifft keine eigenständigen Aktionen ohne
-menschliche Bestätigung.
+Ergänzt die bestehende Übersicht/Filter/Suche (Kapitel 11) um eine zusätzliche Chat-Oberfläche:
+Vincent stellt eine Frage in natürlicher Sprache ("zeig mir alle KI-relevanten Ausschreibungen
+in Bayern mit Frist in den nächsten 14 Tagen"), Claude entscheidet per Tool-Use, welches Werkzeug
+es dafür braucht, ruft es über die bereits bestehende, geprüfte Such-/Health-/Aktions-Logik ab und
+fasst das Ergebnis zusammen.
+
+Zwei Werkzeug-Arten (Nutzeranfrage 25.09.2026 "Kevin darf alle drei Sachen"):
+- LESEND (suche_ausschreibungen, quellstatus): werden sofort ausgeführt, das Ergebnis fließt
+  direkt in Kevins Antwort ein.
+- SCHREIBEND (aktualisieren_starten, suchprofil_anlegen, ausschreibung_merken): werden NICHT
+  automatisch ausgeführt. Sobald Kevin eines davon aufruft, bricht die Tool-Schleife ab und die
+  Aktion wird Vincent als Vorschlag mit Klartext-Beschreibung vorgelegt (siehe AssistantResult.
+  vorschlag) - erst ein expliziter Bestätigungsklick im Frontend führt sie über
+  execute_assistant_action(...) wirklich aus. Kevin trifft also nie selbstständig eine Aktion mit
+  echter Wirkung (ausgelöster Portal-Lauf, neues Suchprofil, geänderter Datensatz).
 
 Ohne konfigurierten ANTHROPIC_API_KEY liefert run_assistant_chat(...) einen klaren Hinweis statt
 eines Fehlers (gleiches Prinzip wie call_llm_json in app/prompts.py) - die restliche Anwendung
@@ -26,7 +33,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import Portal, Tender
+from app.models import Portal, SearchProfile, Tender
 from app.serializers import portal_to_health_out
 from app.tender_queries import search_tenders
 
@@ -54,7 +61,11 @@ SYSTEM_TEMPLATE = (
     "(Kapitel 20.4) - formuliere entsprechend vorsichtig.\n"
     "- Wenn eine Frage mit den Werkzeugen nicht beantwortbar ist, sag das ehrlich statt zu "
     "spekulieren.\n"
-    "- Antworte auf Deutsch, prägnant, ohne Floskeln.\n\n"
+    "- Antworte auf Deutsch, prägnant, ohne Floskeln.\n"
+    "- Du darfst aktualisieren_starten, suchprofil_anlegen und ausschreibung_merken aufrufen, "
+    "wenn Vincent danach fragt oder es offensichtlich sinnvoll ist - diese werden ihm aber immer "
+    "erst zur Bestätigung vorgelegt, du führst sie nie direkt aus. Rufe pro Antwort höchstens "
+    "eines dieser drei Werkzeuge auf.\n\n"
     "Aktuell aktive Portale (Slug - Name):\n{portale}"
 )
 
@@ -93,11 +104,74 @@ TOOLS = [
     },
 ]
 
+# Schreibende Werkzeuge - werden NIE direkt ausgeführt (siehe Moduldocstring), sondern lösen
+# einen Vorschlag aus, den Vincent im Frontend bestätigen oder ablehnen kann.
+WRITE_TOOLS = [
+    {
+        "name": "aktualisieren_starten",
+        "description": (
+            "Stößt einen Aktualisieren-Lauf an, der neue Ausschreibungen von den Portalen holt "
+            "(kann mehrere Minuten dauern). Entweder ein einzelnes Portal (portal_slug) oder, "
+            "wenn weggelassen, alle aktiven Portale parallel."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "portal_slug": {"type": "string", "description": "Slug eines einzelnen Portals aus der Liste im Systemprompt - weglassen für alle aktiven Portale"},
+            },
+        },
+    },
+    {
+        "name": "suchprofil_anlegen",
+        "description": "Legt ein neues gespeichertes Suchprofil an (erscheint danach unter 'Suchprofile' in der Übersicht).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Name des Suchprofils"},
+                "keywords": {"type": "array", "items": {"type": "string"}},
+                "portal_slugs": {"type": "array", "items": {"type": "string"}, "description": "Auf diese Portale beschränken, leer lassen für alle"},
+                "ki_relevanz_min": {"type": "string", "enum": ["moeglich", "stark"]},
+                "region": {"type": "string"},
+                "mindestwert": {"type": "number"},
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "ausschreibung_merken",
+        "description": "Markiert eine Ausschreibung als gemerkt/interessant, optional mit Notiz. tender_id muss aus einem vorherigen suche_ausschreibungen-Ergebnis stammen.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "tender_id": {"type": "string"},
+                "notiz": {"type": "string"},
+            },
+            "required": ["tender_id"],
+        },
+    },
+]
+_WRITE_TOOL_NAMEN = {t["name"] for t in WRITE_TOOLS}
+ALLE_TOOLS = TOOLS + WRITE_TOOLS
+
+
+@dataclass
+class AssistantActionProposal:
+    name: str
+    input: dict
+    beschreibung: str
+
 
 @dataclass
 class AssistantResult:
     antwort: str
     tenders: list[Tender] = field(default_factory=list)
+    vorschlag: AssistantActionProposal | None = None
+
+
+@dataclass
+class AssistantActionResult:
+    erfolg: bool
+    meldung: str
 
 
 def _parse_iso_date(value: str | None) -> date | None:
@@ -172,6 +246,27 @@ def _execute_tool(db: Session, name: str, tool_input: dict, gefundene: dict[str,
     return {"fehler": f"Unbekanntes Werkzeug: {name}"}
 
 
+def _portal_von_slug(db: Session, slug: str) -> Portal | None:
+    return db.scalars(select(Portal).where(Portal.slug == slug)).first()
+
+
+def _beschreibe_aktion(db: Session, name: str, tool_input: dict) -> str:
+    if name == "aktualisieren_starten":
+        slug = tool_input.get("portal_slug")
+        if not slug:
+            return "Kevin möchte einen Aktualisieren-Lauf für alle aktiven Portale starten."
+        portal = _portal_von_slug(db, slug)
+        ziel = portal.name if portal else slug
+        return f"Kevin möchte einen Aktualisieren-Lauf für „{ziel}“ starten."
+    if name == "suchprofil_anlegen":
+        return f"Kevin möchte das Suchprofil „{tool_input.get('name', '(ohne Namen)')}“ anlegen."
+    if name == "ausschreibung_merken":
+        tender = db.get(Tender, tool_input.get("tender_id"))
+        titel = tender.titel if tender else tool_input.get("tender_id", "(unbekannt)")
+        return f"Kevin möchte die Ausschreibung „{titel}“ merken."
+    return f"Kevin möchte das Werkzeug „{name}“ ausführen."
+
+
 def run_assistant_chat(
     db: Session, nachricht: str, verlauf: list[dict] | None = None, client=None
 ) -> AssistantResult:
@@ -197,12 +292,33 @@ def run_assistant_chat(
                 model=settings.anthropic_model,
                 max_tokens=1024,
                 system=system,
-                tools=TOOLS,
+                tools=ALLE_TOOLS,
                 messages=messages,
             )
             if response.stop_reason != "tool_use":
                 text = "".join(block.text for block in response.content if hasattr(block, "text"))
                 return AssistantResult(text or "(keine Antwort)", list(gefundene_tenders.values()))
+
+            text_bisher = "".join(block.text for block in response.content if hasattr(block, "text"))
+            schreibender_block = next(
+                (
+                    block for block in response.content
+                    if getattr(block, "type", None) == "tool_use" and block.name in _WRITE_TOOL_NAMEN
+                ),
+                None,
+            )
+            if schreibender_block is not None:
+                # Nie direkt ausführen (siehe Moduldocstring) - Schleife hier abbrechen und den
+                # Vorschlag zur Bestätigung zurückgeben, auch wenn dieselbe Antwort noch weitere
+                # (ggf. lesende) tool_use-Blöcke enthielte.
+                vorschlag = AssistantActionProposal(
+                    name=schreibender_block.name,
+                    input=schreibender_block.input,
+                    beschreibung=_beschreibe_aktion(db, schreibender_block.name, schreibender_block.input),
+                )
+                return AssistantResult(
+                    text_bisher or vorschlag.beschreibung, list(gefundene_tenders.values()), vorschlag
+                )
 
             messages.append({"role": "assistant", "content": response.content})
             tool_results = []
@@ -221,3 +337,87 @@ def run_assistant_chat(
     except Exception:
         logger.exception("Crawler Kevin: Anfrage fehlgeschlagen")
         return AssistantResult(_NICHT_ERREICHBAR_HINWEIS)
+
+
+def execute_assistant_action(db: Session, name: str, tool_input: dict) -> AssistantActionResult:
+    """Führt eine von Kevin vorgeschlagene und von Vincent im Frontend bestätigte Aktion aus.
+
+    Wird ausschließlich nach expliziter Bestätigung aufgerufen (POST /assistant/actions/execute) -
+    nie automatisch aus run_assistant_chat heraus (siehe Moduldocstring).
+    """
+    if name == "aktualisieren_starten":
+        return _aktion_aktualisieren_starten(db, tool_input)
+    if name == "suchprofil_anlegen":
+        return _aktion_suchprofil_anlegen(db, tool_input)
+    if name == "ausschreibung_merken":
+        return _aktion_ausschreibung_merken(db, tool_input)
+    return AssistantActionResult(False, f"Unbekannte Aktion: {name}")
+
+
+def _aktion_aktualisieren_starten(db: Session, tool_input: dict) -> AssistantActionResult:
+    from fastapi import HTTPException
+
+    from app.api import run as run_api
+
+    slug = tool_input.get("portal_slug")
+    portal_ids = None
+    ziel = "alle aktiven Portale"
+    if slug:
+        portal = _portal_von_slug(db, slug)
+        if portal is None:
+            return AssistantActionResult(False, f"Portal mit Slug '{slug}' nicht gefunden.")
+        portal_ids = [portal.id]
+        ziel = portal.name
+
+    try:
+        run_api.start_run(portal_ids=portal_ids)
+    except HTTPException as exc:
+        return AssistantActionResult(False, str(exc.detail))
+    return AssistantActionResult(True, f"Aktualisieren-Lauf für {ziel} gestartet - Fortschritt siehe Übersicht.")
+
+
+def _aktion_suchprofil_anlegen(db: Session, tool_input: dict) -> AssistantActionResult:
+    name = (tool_input.get("name") or "").strip()
+    if not name:
+        return AssistantActionResult(False, "Suchprofil braucht einen Namen.")
+
+    portal_slugs = tool_input.get("portal_slugs") or []
+    portal_ids = set(portal_slugs)
+    if portal_slugs:
+        slug_ids = [p.id for p in db.scalars(select(Portal).where(Portal.slug.in_(portal_slugs)))]
+        portal_ids = set(slug_ids)
+
+    filter_json: dict = {}
+    if tool_input.get("ki_relevanz_min"):
+        filter_json["ki_relevanz_min"] = tool_input["ki_relevanz_min"]
+    if tool_input.get("region"):
+        filter_json["region"] = tool_input["region"]
+    if tool_input.get("mindestwert") is not None:
+        filter_json["mindestwert"] = tool_input["mindestwert"]
+
+    profile = SearchProfile(
+        name=name,
+        portale=list(portal_ids),
+        keywords=tool_input.get("keywords") or [],
+        filter_json=filter_json,
+        aktiv=True,
+    )
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+
+    from app.agents.search import recompute_profile_hits
+
+    treffer = recompute_profile_hits(db, profile)
+    return AssistantActionResult(True, f"Suchprofil „{name}“ angelegt ({treffer} aktuelle Treffer).")
+
+
+def _aktion_ausschreibung_merken(db: Session, tool_input: dict) -> AssistantActionResult:
+    tender = db.get(Tender, tool_input.get("tender_id"))
+    if tender is None:
+        return AssistantActionResult(False, "Ausschreibung nicht gefunden.")
+    tender.gemerkt = True
+    if tool_input.get("notiz"):
+        tender.merk_notiz = tool_input["notiz"]
+    db.commit()
+    return AssistantActionResult(True, f"„{tender.titel}“ gemerkt.")
