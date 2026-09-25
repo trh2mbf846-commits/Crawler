@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
+import { Assistant } from './pages/Assistant'
 import { Escalations } from './pages/Escalations'
 import { Overview } from './pages/Overview'
 import { PortalStatus } from './pages/PortalStatus'
@@ -19,6 +20,7 @@ function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<Overview />} />
+        <Route path="/assistant" element={<Assistant />} />
         <Route path="/tenders/:id" element={<TenderDetailPage />} />
         <Route path="/profiles" element={<SearchProfiles />} />
         <Route path="/portals" element={<PortalStatus />} />

@@ -38,9 +38,32 @@ jeweiligen Connector-Module (`backend/app/agents/connector/*.py`).
 (Connector → Discovery → Analysis → Normalization → Duplicate → AI Classification → Search →
 Source Health), Job-/Eskalations-System, Ranking-Engine, Scheduler (per Konfiguration
 abschaltbar, siehe Deployment unten), REST-API, manueller Aktualisieren-Button (`POST
-/api/run-all`) und Frontend (Übersicht, Filter, Suche, Detailansicht, Suchprofile,
-Quellstatus-Dashboard mit Quellen-Übersicht, Entscheidungs-Posteingang). 24 automatisierte
-Tests plus reale Testläufe gegen 7 Live-Portale mit 7306 echten Ausschreibungen.
+/api/run-all`), KI-Assistent (siehe unten) und Frontend (Übersicht, Filter, Suche,
+Detailansicht, Suchprofile, Quellstatus-Dashboard mit Quellen-Übersicht,
+Entscheidungs-Posteingang, KI-Assistent-Tab). 33 automatisierte Tests plus reale Testläufe
+gegen 7 Live-Portale mit 7306 echten Ausschreibungen.
+
+### KI-Assistent (Update 25.09.2026)
+
+Nutzeranfrage: "Richtung KI-Agent, aber die Übersicht soll bleiben". Ergänzt - nicht ersetzt -
+die bestehende Übersicht um einen zusätzlichen Tab (`/assistant`, `frontend/src/pages/
+Assistant.tsx`): eine Chat-Oberfläche, in der Fragen in natürlicher Sprache zu erfassten
+Ausschreibungen und zum Quellstatus gestellt werden können (z. B. "welche KI-relevanten
+Ausschreibungen in Bayern laufen in den nächsten 14 Tagen aus?").
+
+Technisch ein Tool-Use-Agent auf Basis der Anthropic API (`backend/app/agents/assistant.py`,
+`POST /api/assistant/chat`): Claude entscheidet selbst, ob und welches der beiden Werkzeuge
+(`suche_ausschreibungen`, `quellstatus`) es für eine Antwort braucht, ruft es auf und fasst das
+Ergebnis zusammen. Beide Werkzeuge nutzen dieselbe, bereits geprüfte Such-/Health-Logik wie die
+REST-API (aus `api/tenders.py` in `app/tender_queries.py` herausgelöst, damit Chat und normale
+Suche nicht auseinanderlaufen). Bewusst **keine schreibenden Werkzeuge** - der Assistent löst
+keine Läufe aus und ändert keine Daten, er beantwortet nur Fragen zum vorhandenen Bestand.
+
+Ohne konfigurierten `CRAWLER_ANTHROPIC_API_KEY` (wie in dieser Entwicklungsumgebung) liefert der
+Endpunkt einen klaren Hinweis statt eines Fehlers - live per Browser-Test verifiziert (Screenshot-
+Verifikation: Übersicht bleibt unverändert Startseite, neuer Tab funktioniert, Fallback-Hinweis
+erscheint korrekt). Die eigentliche Tool-Use-Schleife ist mit einem eingeschleusten Fake-Client
+automatisiert getestet (`tests/test_assistant.py`), da diese Umgebung selbst keinen API-Key hat.
 
 ### Neues Portal: Vergabeplattform Bayern (Update 25.09.2026)
 

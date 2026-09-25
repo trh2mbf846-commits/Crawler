@@ -1,4 +1,6 @@
 import type {
+  AssistantChatResult,
+  AssistantMessage,
   Escalation,
   EscalationStatus,
   HistoryEntry,
@@ -160,4 +162,11 @@ export function resolveEscalation(id: string, entscheidung: string): Promise<Esc
 
 export function fetchCategories(): Promise<string[]> {
   return request<string[]>('/categories')
+}
+
+export function sendAssistantMessage(nachricht: string, verlauf: AssistantMessage[] = []): Promise<AssistantChatResult> {
+  return request<AssistantChatResult>('/assistant/chat', {
+    method: 'POST',
+    body: JSON.stringify({ nachricht, verlauf }),
+  })
 }

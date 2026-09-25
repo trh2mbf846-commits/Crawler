@@ -139,6 +139,17 @@ export interface Paginated<T> {
   page_size: number
 }
 
+export interface AssistantMessage {
+  rolle: 'user' | 'assistant'
+  text: string
+}
+
+export interface AssistantChatResult {
+  antwort: string
+  verfuegbar: boolean
+  tenders: Tender[]
+}
+
 export interface TenderQuery {
   q?: string
   portal?: string[]

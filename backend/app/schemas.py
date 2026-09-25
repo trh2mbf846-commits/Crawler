@@ -141,3 +141,19 @@ class RunAllStatusOut(BaseModel):
     beendet_am: datetime | None
     aktuelle_portale: list[str]
     ergebnisse: list[RunAllPortalResultOut]
+
+
+class AssistantMessageIn(BaseModel):
+    rolle: str  # user | assistant
+    text: str
+
+
+class AssistantChatIn(BaseModel):
+    nachricht: str
+    verlauf: list[AssistantMessageIn] = []
+
+
+class AssistantChatOut(BaseModel):
+    antwort: str
+    verfuegbar: bool
+    tenders: list[TenderOut]

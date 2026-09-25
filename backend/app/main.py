@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from app.api import categories, escalations, portals, run, search_profiles, tenders
+from app.api import assistant, categories, escalations, portals, run, search_profiles, tenders
 from app.config import settings
 from app.db import SessionLocal, init_db
 from app.scheduler import start_scheduler, stop_scheduler
@@ -48,6 +48,7 @@ app.include_router(search_profiles.router, prefix="/api")
 app.include_router(escalations.router, prefix="/api")
 app.include_router(categories.router, prefix="/api")
 app.include_router(run.router, prefix="/api")
+app.include_router(assistant.router, prefix="/api")
 
 
 @app.get("/api/health")
