@@ -1,10 +1,14 @@
 from datetime import datetime, timedelta
 
+import httpx
+
 from app import queue
-from app.agents.digest import build_daily_digest
-from app.agents.duplicate import run_duplicate
-from app.models import AssistantPreferences, Portal, Tender
+from app.agents import digest as digest_module
 from app.agents import source_health
+from app.agents.digest import DigestResult, build_daily_digest, send_digest_webhook
+from app.agents.duplicate import run_duplicate
+from app.config import settings
+from app.models import AssistantPreferences, Portal, Tender
 
 
 def _angelegte_ausschreibung(db, portal, **overrides):
@@ -87,3 +91,51 @@ def test_digest_erwaehnt_prioritaeten_wenn_gesetzt(db):
     ergebnis = build_daily_digest(db)
 
     assert "Fokus auf KI-Projekte in Bayern" in ergebnis.text
+
+
+_BEISPIEL_DIGEST = DigestResult(text="Testbericht", neue_relevante_anzahl=1, bald_ablaufend_anzahl=0, portale_mit_problem=[])
+
+
+def test_send_digest_webhook_ohne_url_liefert_false(monkeypatch):
+    monkeypatch.setattr(settings, "digest_webhook_url", None)
+
+    assert send_digest_webhook(_BEISPIEL_DIGEST) is False
+
+
+def test_send_digest_webhook_schickt_post_mit_text_und_content(monkeypatch):
+    monkeypatch.setattr(settings, "digest_webhook_url", "https://example.invalid/webhook")
+    aufrufe = []
+
+    def fake_post(url, json, timeout):
+        aufrufe.append((url, json))
+        return httpx.Response(200)
+
+    monkeypatch.setattr(digest_module.httpx, "post", fake_post)
+
+    ergebnis = send_digest_webhook(_BEISPIEL_DIGEST)
+
+    assert ergebnis is True
+    assert len(aufrufe) == 1
+    url, payload = aufrufe[0]
+    assert url == "https://example.invalid/webhook"
+    assert payload["text"] == "Testbericht"
+    assert payload["content"] == "Testbericht"
+    assert payload["neue_relevante_anzahl"] == 1
+
+
+def test_send_digest_webhook_liefert_false_bei_fehlerstatus(monkeypatch):
+    monkeypatch.setattr(settings, "digest_webhook_url", "https://example.invalid/webhook")
+    monkeypatch.setattr(digest_module.httpx, "post", lambda *a, **k: httpx.Response(500))
+
+    assert send_digest_webhook(_BEISPIEL_DIGEST) is False
+
+
+def test_send_digest_webhook_liefert_false_bei_verbindungsfehler(monkeypatch):
+    monkeypatch.setattr(settings, "digest_webhook_url", "https://example.invalid/webhook")
+
+    def _raise(*args, **kwargs):
+        raise httpx.ConnectError("nicht erreichbar")
+
+    monkeypatch.setattr(digest_module.httpx, "post", _raise)
+
+    assert send_digest_webhook(_BEISPIEL_DIGEST) is False

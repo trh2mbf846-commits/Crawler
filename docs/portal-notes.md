@@ -14,7 +14,7 @@ Befund-Docstring).
 | Portal | robots.txt | Zugriff auf Übersicht/Detail | Login/CAPTCHA? | Status |
 |---|---|---|---|---|
 | **ITDZ Berlin** | Vorhanden, erlaubt automatisierten Zugriff explizit bei klarer User-Agent-Kennung | Statisches HTML, keine Pagination nötig | Nein | `geprueft_ok` |
-| **Vergabeplattform Berlin** | Keine robots.txt (404) | Server-seitiges HTML, Pagination über `&Start=N`, Detailseite inkl. Vergabeunterlagen vollständig öffentlich | Nein (Login nur für Angebotsabgabe, nicht fürs Einsehen) | `geprueft_ok` |
+| **Vergabeplattform Berlin** | Keine robots.txt (404) | Server-seitiges HTML, Pagination über `&Start=N`, Bekanntmachung/Detailseite öffentlich - Vergabeunterlagen-Downloads selbst erfordern Registrierung als Verfahrens-Teilnehmer | Nein für Detailseite; ja für Dokument-Downloads | `geprueft_ok` |
 | **DB Bieterportal** | Kein echtes robots.txt (Server liefert für jeden Pfad die SPA-Startseite) | Reine Angular/Telerik-Kendo-SPA (Webpack-Bundles, SignalR/WebSocket-Datenkanal), Inhalte nur nach JS-Rendering sichtbar | Auf der Übersichtsseite selbst nicht erkennbar (noch nicht bis zum Ende getestet, siehe unten) | `ungeprueft` (technischer Blocker, siehe unten) |
 
 ### ITDZ Berlin – Details
@@ -38,10 +38,21 @@ Keine robots.txt vorhanden. Die Teilnahmebedingungen regeln ausschließlich die 
 für die **Teilnahme** an Vergabeverfahren (Angebotsabgabe) - das Einsehen veröffentlichter
 Bekanntmachungen ist ausdrücklich ohne Registrierung möglich; "Anmelden" ist im Menü ein
 separater Punkt, keine Zugriffsschranke für die öffentliche Suche. Kein Hinweis auf ein
-Verbot automatisierten Abrufs gefunden. Sogar die Vergabeunterlagen sind laut Detailseite
-"für einen uneingeschränkten und vollständigen direkten Zugang gebührenfrei" verfügbar - das
-Beispiel-Szenario aus Kapitel 10.3 (Dokumente nur nach Login) trifft hier **nicht** zu, daher
-keine Eskalation nötig. → **Vollständig öffentlich, automatisierter Abruf unproblematisch.**
+Verbot automatisierten Abrufs gefunden. → **Bekanntmachung/Detailseite vollständig öffentlich,
+automatisierter Abruf unproblematisch.**
+
+**Korrektur 25.09.2026 (PDF-Volltextextraktion, `app/agents/document_extraction.py`):** die
+oben zitierte Werbeaussage der Detailseite ("für einen uneingeschränkten und vollständigen
+direkten Zugang gebührenfrei") bezog sich, wie ein Live-Abruf der tatsächlichen
+"Unterlagen zur Ansicht herunterladen"-Links zeigt, offenbar nur auf die Gebührenfreiheit,
+nicht auf einen anonymen Zugriff: der Download selbst liefert eine HTML-Seite mit dem Text
+"...registriert und Teilnehmer des Verfahrens sein müssen. Eine Registrierung können Sie
+hier durchführen." Die eigentlichen Vergabeunterlagen-PDFs sind also - anders als hier zuvor
+dokumentiert - erst nach Registrierung als Verfahrens-Teilnehmer zugänglich, nicht
+uneingeschränkt öffentlich. `extract_pdf_text()` erkennt das korrekt (Content-Type ist HTML,
+kein PDF) und liefert `None`, ohne die Zugriffsschranke zu umgehen. Für Kevins
+`dokumente_lesen`-Werkzeug bedeutet das: bei Vergabeplattform-Berlin-Ausschreibungen bleibt
+der Dokumentinhalt i. d. R. leer, nur der Link wird gespeichert.
 
 Die vom Auftraggeber vorgegebene Einstiegs-URL (`LoginControllerServlet?function=
 CookiesCheckDone`) ist entgegen des Namens kein Bieter-Login, sondern nur ein

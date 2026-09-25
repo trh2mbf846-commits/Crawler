@@ -2,16 +2,29 @@
 
 und sorgt dafür, dass Probleme auch ohne tägliche manuelle Kontrolle zuverlässig auffallen
 (Voraussetzung für den in Kapitel 17 beschriebenen unbeaufsichtigten Langzeitbetrieb).
+
+Selbstdiagnose bei Eskalation (Nutzerrecherche 25.09.2026 zu guten Crawling-Agenten:
+"LLM als Reparaturtechniker, nur im Fehlerfall, nie im Normalbetrieb" statt teurem Dauereinsatz).
+Bewusste Sicherheitsgrenze (siehe Chat-Verlauf/README): die Diagnose schreibt NIE selbstständig
+Connector-Code um, sondern liefert Vincent über Escalation.empfehlung eine informierte
+Ersteinschätzung ("Zugriffsschranke oder Strukturänderung? Was genau sieht anders aus?"), die er
+dann selbst - oder mit einer separaten Coding-Session - umsetzt. Ohne ANTHROPIC_API_KEY läuft
+alles wie bisher, nur ohne die automatische Diagnose (siehe _diagnose_portal_problem).
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import Escalation, Portal, SourceHealthMetric
+from app.prompts import QUELLSTATUS_SYSTEM, call_llm_json, quellstatus_user
+
+_DIAGNOSE_TIMEOUT_SEKUNDEN = 10.0
+_DIAGNOSE_SNIPPET_ZEICHEN = 4000
 
 
 def record_run(
@@ -134,5 +147,52 @@ def _eskaliere_falls_noetig(db: Session, portal: Portal, kategorie: str, kontext
     ).first()
     if bereits_offen is not None:
         return
-    db.add(Escalation(portal_id=portal.id, kategorie=kategorie, kontext=kontext, optionen=optionen, status="offen"))
+    empfehlung = _formatiere_diagnose(_diagnose_portal_problem(portal, kontext))
+    db.add(
+        Escalation(
+            portal_id=portal.id, kategorie=kategorie, kontext=kontext, optionen=optionen,
+            empfehlung=empfehlung, status="offen",
+        )
+    )
     db.commit()
+
+
+def _diagnose_portal_problem(portal: Portal, kontext: str) -> dict | None:
+    """Ruft im Fehlerfall (nur hier, nicht im Normalbetrieb) einmalig die aktuelle Portalseite ab
+
+    und lässt Claude einschätzen, ob eine Zugriffsschranke oder eine Strukturänderung vorliegt -
+    "Reparaturtechniker bei Bedarf" statt Dauereinsatz. Liefert None ohne API-Key oder bei jedem
+    Fehlschlag (kein gespeicherter Referenzzustand vorhanden, daher rein auf Basis der aktuellen
+    Seite - eine Heuristik, kein Ersatz für eine echte Prüfung).
+    """
+    if not settings.anthropic_api_key:
+        return None
+    try:
+        response = httpx.get(portal.base_url, timeout=_DIAGNOSE_TIMEOUT_SEKUNDEN, follow_redirects=True)
+        aktuelle_snippet = response.text[:_DIAGNOSE_SNIPPET_ZEICHEN]
+    except httpx.HTTPError:
+        return None
+
+    return call_llm_json(
+        QUELLSTATUS_SYSTEM,
+        quellstatus_user(
+            portal.name,
+            referenz_snippet=(
+                "(kein gespeicherter Referenzzustand vorhanden - beurteile nur, ob die aktuelle "
+                "Seite normal aussieht, eine Zugriffsschranke (Login/CAPTCHA) zeigt oder "
+                "strukturell verändert wirkt)"
+            ),
+            aktuelle_snippet=aktuelle_snippet,
+            fehler=kontext,
+        ),
+    )
+
+
+def _formatiere_diagnose(diagnose: dict | None) -> str | None:
+    if not diagnose:
+        return None
+    teile = [t for t in (diagnose.get("vermutete_ursache"), diagnose.get("kurzbegruendung")) if t]
+    if not teile:
+        return None
+    text = " - ".join(teile)
+    return f"[Automatische Ersteinschätzung, keine gesicherte Diagnose] {text}"

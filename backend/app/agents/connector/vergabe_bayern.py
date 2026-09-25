@@ -168,6 +168,7 @@ class VergabeBayernConnector(BaseConnector):
                 "verfahrensart": None,
                 "angebotsfrist": meta.get("angebotsfrist"),
                 "cpv_codes": [],
+                "dokumente_links": _vergabeunterlagen_links(response.text),
             },
         )
 
@@ -230,3 +231,17 @@ def _abschnitt_erste_zeile(container, ueberschrift: str) -> str | None:
                 if text != heading_text:
                     return text
     return None
+
+
+# Regex statt DOM-Selektor: die Vergabeunterlagen-Downloadlinks liegen nicht als normale
+# <a href>-Tags im HTML, sondern in einer JS-Variable (documentsAttachments/documentsApplicationForm)
+# als verschachteltes JSON-artiges Literal mit escapten Slashes ("\/") - ein Regex direkt auf
+# response.text ist hier robuster als ein DOM-Parser. Live verifiziert 25.09.2026: die
+# resultierenden download.php-Links sind vollständig öffentlich (kein Login, kein Cookie/Session
+# nötig - funktioniert auch mit einem komplett frischen HTTP-Client) und liefern echte PDFs.
+_DOKUMENT_HASH_MUSTER = re.compile(r"download\.php\?k=([a-f0-9]{20,64})")
+
+
+def _vergabeunterlagen_links(html: str) -> list[str]:
+    hashes = dict.fromkeys(_DOKUMENT_HASH_MUSTER.findall(html))  # dedupliziert, behält Reihenfolge
+    return [f"https://my.vergabe.bayern.de/remote/download.php?k={h}" for h in hashes]

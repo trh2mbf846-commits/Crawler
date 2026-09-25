@@ -105,6 +105,21 @@ TOOLS = [
         ),
         "input_schema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "dokumente_lesen",
+        "description": (
+            "Liest den extrahierten Volltext der Vergabeunterlagen (PDF) einer Ausschreibung - "
+            "z. B. um Details zu beantworten, die nicht in der Kurzbeschreibung stehen. "
+            "tender_id muss aus einem vorherigen suche_ausschreibungen-Ergebnis stammen. Nicht "
+            "jedes Dokument hat einen Volltext (kein PDF, Download/Parsing fehlgeschlagen, oder "
+            "nur die ersten paar Dokumente je Ausschreibung werden ausgewertet)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"tender_id": {"type": "string"}},
+            "required": ["tender_id"],
+        },
+    },
 ]
 
 # Schreibende Werkzeuge - werden NIE direkt ausgeführt (siehe Moduldocstring), sondern lösen
@@ -260,11 +275,32 @@ def _tool_quellstatus(db: Session) -> dict:
     return {"portale": ausgabe}
 
 
+_DOKUMENT_AUSZUG_ZEICHEN = 3000
+
+
+def _tool_dokumente_lesen(db: Session, tool_input: dict) -> dict:
+    tender = db.get(Tender, tool_input.get("tender_id"))
+    if tender is None:
+        return {"fehler": "Ausschreibung nicht gefunden."}
+    dokumente = [
+        {
+            "titel": d.titel,
+            "url": d.url,
+            "volltext_auszug": d.volltext[:_DOKUMENT_AUSZUG_ZEICHEN] if d.volltext else None,
+            "hinweis": None if d.volltext else "Kein Volltext verfügbar für dieses Dokument.",
+        }
+        for d in tender.dokumente
+    ]
+    return {"titel": tender.titel, "dokumente": dokumente}
+
+
 def _execute_tool(db: Session, name: str, tool_input: dict, gefundene: dict[str, Tender]) -> dict:
     if name == "suche_ausschreibungen":
         return _tool_suche_ausschreibungen(db, tool_input, gefundene)
     if name == "quellstatus":
         return _tool_quellstatus(db)
+    if name == "dokumente_lesen":
+        return _tool_dokumente_lesen(db, tool_input)
     return {"fehler": f"Unbekanntes Werkzeug: {name}"}
 
 

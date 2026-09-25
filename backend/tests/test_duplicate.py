@@ -1,6 +1,7 @@
 from app import queue
+from app.agents import duplicate as duplicate_module
 from app.agents.duplicate import run_duplicate
-from app.models import Portal, Tender, TenderHistory
+from app.models import Portal, Tender, TenderDocument, TenderHistory
 
 
 def _normalized(**overrides):
@@ -118,3 +119,33 @@ def test_unaehnliche_ausschreibung_auf_anderem_portal_bleibt_unmarkiert(db, port
 
     tender2 = db.get(Tender, ergebnis2["tender_id"])
     assert tender2.moeglicherweise_duplikat_hinweis is None
+
+
+def test_dokumente_werden_angelegt_und_bis_zum_limit_ausgewertet(db, portal, monkeypatch):
+    aufgerufene_urls = []
+
+    def fake_extract_pdf_text(url):
+        aufgerufene_urls.append(url)
+        return f"Volltext von {url}"
+
+    monkeypatch.setattr(duplicate_module, "MAX_DOKUMENTE_PRO_AUSSCHREIBUNG", 2)
+    monkeypatch.setattr(duplicate_module, "extract_pdf_text", fake_extract_pdf_text)
+
+    job = queue.enqueue(
+        db, "duplicate", portal_id=portal.id,
+        payload={"normalized": _normalized(dokumente_links=[
+            "https://example.invalid/doc1.pdf",
+            "https://example.invalid/doc2.pdf",
+            "https://example.invalid/doc3.pdf",
+        ])},
+    )
+    ergebnis = run_duplicate(db, job)
+
+    dokumente = db.query(TenderDocument).filter(TenderDocument.tender_id == ergebnis["tender_id"]).order_by(TenderDocument.url).all()
+    assert len(dokumente) == 3
+    # Nur die ersten beiden (Limit) wurden tatsächlich ausgewertet.
+    assert aufgerufene_urls == ["https://example.invalid/doc1.pdf", "https://example.invalid/doc2.pdf"]
+    volltexte = {d.url: d.volltext for d in dokumente}
+    assert volltexte["https://example.invalid/doc1.pdf"] == "Volltext von https://example.invalid/doc1.pdf"
+    assert volltexte["https://example.invalid/doc2.pdf"] == "Volltext von https://example.invalid/doc2.pdf"
+    assert volltexte["https://example.invalid/doc3.pdf"] is None

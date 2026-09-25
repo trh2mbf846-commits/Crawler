@@ -49,6 +49,15 @@ class Settings(BaseSettings):
     # CRAWLER_SCHEDULER_ENABLED=false abgeschaltet.
     scheduler_enabled: bool = True
 
+    # Proaktive Push-Benachrichtigung (Nutzeranfrage 25.09.2026, "was können gute Agenten noch"):
+    # Kevins Kurzbericht (app/agents/digest.py) lädt bisher nur beim Öffnen des Tabs (Pull). Mit
+    # gesetzter Webhook-URL schickt der Scheduler ihn zusätzlich täglich unaufgefordert dorthin
+    # (Slack/Discord/Mattermost-Incoming-Webhook, n8n, Zapier o. ä. - alle akzeptieren einen
+    # simplen JSON-POST mit "text"/"content"). Ohne gesetzten Wert bleibt es beim reinen
+    # Pull-Kurzbericht wie bisher, nur der Scheduler muss dafür laufen (CRAWLER_SCHEDULER_ENABLED).
+    digest_webhook_url: str | None = None
+    digest_stunde: int = 7  # Uhrzeit (UTC) für den täglichen Kurzbericht, falls Webhook gesetzt
+
 
 settings = Settings()
 (BACKEND_DIR / "data").mkdir(parents=True, exist_ok=True)

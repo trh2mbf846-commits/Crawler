@@ -40,7 +40,7 @@ Source Health), Job-/Eskalations-System, Ranking-Engine, Scheduler (per Konfigur
 abschaltbar, siehe Deployment unten), REST-API, manueller Aktualisieren-Button (`POST
 /api/run-all`), KI-Assistent "Crawler Kevin" (siehe unten) und Frontend (Übersicht, Filter,
 Suche, Detailansicht, Suchprofile, Quellstatus-Dashboard mit Quellen-Übersicht,
-Entscheidungs-Posteingang, Crawler-Kevin-Tab). 63 automatisierte Tests plus reale Testläufe
+Entscheidungs-Posteingang, Crawler-Kevin-Tab). 82 automatisierte Tests plus reale Testläufe
 gegen 7 Live-Portale mit 7306 echten Ausschreibungen.
 
 ### KI-Assistent "Crawler Kevin" (Update 25.09.2026)
@@ -131,6 +131,55 @@ RIB/iTWO wird laut Recherche als White-Label-Plattform von mehreren Bundeslände
 (ähnlich wie cosinex für DTVP/Brandenburg) - weitere Bundesländer mit eigener `filter`-ID wären
 ein nahliegender nächster Schritt für noch mehr Abdeckung (`docs/portal-notes.md`).
 
+### PDF-Volltextsuche, Selbstdiagnose, Push-Benachrichtigung (Update 25.09.2026)
+
+Nutzeranfrage nach Recherche zu "was können gute Agenten fürs Crawling/Durchsuchen noch": "alles
+auf einmal, damit es direkt perfekt ist". Drei Ausbaustufen:
+
+- **Vergabeunterlagen-Volltext** (`backend/app/agents/document_extraction.py`): lädt verlinkte
+  PDF-Anhänge herunter und extrahiert ihren Text (`pypdf`, begrenzt auf max. 3 Dokumente/
+  Ausschreibung, 40 Seiten, 20.000 Zeichen, 15 MB Downloadgröße - rein additiv, ein
+  Fehlschlag bricht nie den Duplicate-Agenten ab). Neues Kevin-Werkzeug `dokumente_lesen`
+  liest die gespeicherten Auszüge auf Nachfrage. Live verifiziert an einer echten
+  Vergabeplattform-Bayern-Ausschreibung: 21 reale Dokumentlinks gefunden (dafür musste der
+  Bayern-Connector zuerst um eine `dokumente_links`-Extraktion aus dem eingebetteten
+  JS-Objekt ergänzt werden, `vergabe_bayern.py`), erstes Dokument vollständig heruntergeladen
+  und zu ~20.000 Zeichen echtem PDF-Text verarbeitet. Dabei eine bestehende
+  Dokumentations-Ungenauigkeit gefunden und korrigiert (`docs/portal-notes.md`): die
+  Vergabeplattform-Berlin-Detailseite wirbt zwar mit gebührenfreiem Zugang, die eigentlichen
+  Dokument-Downloads verlangen aber tatsächlich eine Registrierung als Verfahrens-Teilnehmer -
+  `extract_pdf_text()` erkennt das korrekt (HTML statt PDF) und liefert `None`, ohne die
+  Zugriffsschranke zu umgehen.
+- **Selbstdiagnose bei Quell-Eskalation** (`backend/app/agents/source_health.py`): löst eine
+  Eskalation aus (z. B. weil ein Connector plötzlich 0 Treffer liefert), ruft **nur dann, nur
+  falls `CRAWLER_ANTHROPIC_API_KEY` gesetzt ist**, die Live-Seite des Portals ab und lässt ein
+  LLM eine erste Einschätzung der vermutlichen Ursache formulieren (wiederverwendet den
+  bereits vorhandenen, bis dahin ungenutzten `QUELLSTATUS_SYSTEM`-Prompt). Die Einschätzung
+  landet als Empfehlungstext an der Eskalation - **ausdrücklich keine automatische
+  Code-Änderung oder gar ein automatisches Deployment**, das bleibt bewusst Vincents
+  Entscheidung; ohne API-Key funktioniert die Eskalation unverändert wie bisher, nur ohne die
+  zusätzliche Einschätzung.
+- **Echte Push-Benachrichtigung für den Kurzbericht** (`backend/app/agents/digest.py`,
+  `app/scheduler.py`): bislang wurde der proaktive Kurzbericht (siehe oben) nur beim Öffnen
+  von Kevins Chat-Tab angezeigt (reines Pull-Modell). Optional (`CRAWLER_DIGEST_WEBHOOK_URL`)
+  schickt ein täglicher Scheduler-Job (`CRAWLER_DIGEST_STUNDE`, Default 7 Uhr) denselben
+  Kurzbericht zusätzlich per POST-Webhook - Payload enthält sowohl `text` (Slack/Mattermost-
+  kompatibel) als auch `content` (Discord-kompatibel), passt sich also ohne weitere
+  Konfiguration an gängige Chat-Webhook-Formate an (auch für n8n/Zapier nutzbar). Ohne
+  gesetzte URL bleibt das Verhalten wie bisher rein Pull-basiert. Live verifiziert gegen einen
+  lokalen Test-Webhook-Empfänger: Kurzbericht kommt vollständig und mit beiden Schlüsseln an.
+
+Beim Testen mit dieser neuen Funktionalität gegen die echte, persistente Entwicklungs-
+Datenbank (`data/ausschreibungscrawler.db`) zusätzlich eine echte, unabhängige Lücke
+gefunden und behoben: `Base.metadata.create_all()` legt nur komplett neue Tabellen an, nie
+fehlende Spalten in bereits existierenden Tabellen - eine Datenbank, die älter als eine der
+Schema-Erweiterungen dieser Session ist, crashte dadurch beim Start mit `no such column`.
+Neue `_sqlite_synchronisiere_fehlende_spalten()` in `backend/app/db.py` ergänzt beim Start
+automatisch und rein additiv (nie ein DROP/RENAME) fehlende Spalten per `ALTER TABLE`. Live
+verifiziert: gegen eine absichtlich veraltete Test-Datenbank ausgeführt, alle fehlenden
+Spalten korrekt ergänzt; anschließend auf die echte Entwicklungs-Datenbank angewendet, die
+tatsächlich betroffen war.
+
 ### Aktualisieren-Button: parallel + maximale Abdeckung (Update 05.09.2026)
 
 Nutzeranfrage: "möglichst viele Ausschreibungen abbilden können und ausfiltern" + der
@@ -216,7 +265,10 @@ Zentrale Einstellungen (Ranking-Gewichte, Source-Health-Schwellenwerte, optional
 Claude-API-Key für die LLM-Nachbewertung von Grenzfällen) über Umgebungsvariablen mit Präfix
 `CRAWLER_`, siehe `backend/app/config.py`. Ohne `CRAWLER_ANTHROPIC_API_KEY` läuft die
 Keyword-/CPV-Klassifikation (Kapitel 4.1/4.2) unverändert weiter - die LLM-Stufe (Kapitel 4.3)
-wird dann einfach übersprungen.
+wird dann einfach übersprungen (ebenso die Selbstdiagnose bei Quell-Eskalationen, siehe oben).
+Optional `CRAWLER_DIGEST_WEBHOOK_URL` (Slack/Discord/Mattermost/n8n/Zapier-kompatible
+Incoming-Webhook-URL) für den täglichen Kurzbericht per Push, `CRAWLER_DIGEST_STUNDE` (Default
+`7`, UTC) für die Uhrzeit des täglichen Jobs.
 
 ## Deployment (Aktualisieren-Button statt Dauerbetrieb)
 

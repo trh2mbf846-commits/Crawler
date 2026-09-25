@@ -4,6 +4,7 @@ from app.agents.assistant import (
     _NICHT_ERREICHBAR_HINWEIS,
     _NICHT_KONFIGURIERT_HINWEIS,
     _ZU_KOMPLEX_HINWEIS,
+    _tool_dokumente_lesen,
     _tool_quellstatus,
     _tool_suche_ausschreibungen,
     execute_assistant_action,
@@ -11,7 +12,7 @@ from app.agents.assistant import (
 )
 from app.agents.assistant import _build_system_prompt
 from app.agents.duplicate import run_duplicate
-from app.models import AssistantPreferences, SearchProfile, Tender
+from app.models import AssistantPreferences, SearchProfile, Tender, TenderDocument
 
 
 class FakeTextBlock:
@@ -229,3 +230,23 @@ def test_systemprompt_enthaelt_gesetzte_praeferenzen(db):
     assert "Fokus auf KI in Bayern" in prompt
     assert "KI & Machine Learning" in prompt
     assert "50.000" in prompt or "50,000" in prompt
+
+
+def test_tool_dokumente_lesen_liefert_volltext_und_hinweis(db, portal):
+    tender_id = _angelegte_ausschreibung(db, portal)
+    db.add(TenderDocument(tender_id=tender_id, url="https://example.invalid/a.pdf", titel="Leistungsbeschreibung", volltext="Auszug aus dem PDF"))
+    db.add(TenderDocument(tender_id=tender_id, url="https://example.invalid/b.pdf", titel="Anhang ohne Volltext", volltext=None))
+    db.commit()
+
+    ergebnis = _tool_dokumente_lesen(db, {"tender_id": tender_id})
+
+    dokumente = {d["url"]: d for d in ergebnis["dokumente"]}
+    assert dokumente["https://example.invalid/a.pdf"]["volltext_auszug"] == "Auszug aus dem PDF"
+    assert dokumente["https://example.invalid/b.pdf"]["volltext_auszug"] is None
+    assert dokumente["https://example.invalid/b.pdf"]["hinweis"] is not None
+
+
+def test_tool_dokumente_lesen_unbekannte_id(db):
+    ergebnis = _tool_dokumente_lesen(db, {"tender_id": "existiert-nicht"})
+
+    assert "fehler" in ergebnis

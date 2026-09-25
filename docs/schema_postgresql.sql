@@ -71,7 +71,10 @@ CREATE TABLE tender_documents (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tender_id  UUID NOT NULL REFERENCES tenders(id) ON DELETE CASCADE,
   titel      TEXT,
-  url        TEXT NOT NULL
+  url        TEXT NOT NULL,
+  -- Zusatz (25.09.2026): best-effort extrahierter Text bei PDF-Vergabeunterlagen, siehe
+  -- app/agents/document_extraction.py. NULL, wenn kein PDF oder Extraktion fehlgeschlagen.
+  volltext   TEXT
 );
 
 CREATE TABLE tender_history (

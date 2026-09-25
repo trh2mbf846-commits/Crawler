@@ -119,6 +119,10 @@ class TenderDocument(Base):
     )
     titel: Mapped[str | None] = mapped_column(Text, nullable=True)
     url: Mapped[str] = mapped_column(Text, nullable=False)
+    # Zusatz (25.09.2026, Nutzerrecherche zu guten Crawling-Agenten): bei PDF-Vergabeunterlagen
+    # best-effort extrahierter Text statt nur des Links, siehe app/agents/document_extraction.py.
+    # NULL, wenn kein PDF, Download/Parsing fehlgeschlagen, oder (noch) nicht versucht.
+    volltext: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     tender: Mapped[Tender] = relationship(back_populates="dokumente")
 

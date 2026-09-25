@@ -10,5 +10,6 @@ playwright>=1.45
 apscheduler>=3.10
 python-dateutil>=2.9
 anthropic>=0.34
+pypdf>=4.2
 pytest>=8.2
 pytest-asyncio>=0.23

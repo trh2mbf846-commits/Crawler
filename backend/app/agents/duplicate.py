@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import queue
+from app.agents.document_extraction import MAX_DOKUMENTE_PRO_AUSSCHREIBUNG, extract_pdf_text
 from app.models import Job, Tender, TenderDocument, TenderHistory
 
 # Felder, deren Änderung als History-Eintrag erfasst wird (Kapitel 6: aenderungshistorie).
@@ -171,8 +172,12 @@ def run_duplicate(db: Session, job: Job) -> dict:
         )
         db.add(tender)
         db.flush()
-        for doc_url in n.get("dokumente_links") or []:
-            db.add(TenderDocument(tender_id=tender.id, url=doc_url, titel=None))
+        for index, doc_url in enumerate(n.get("dokumente_links") or []):
+            # Nur die ersten paar Dokumente inhaltlich auswerten (Nutzerrecherche 25.09.2026:
+            # Dokumentinhalte statt nur Links) - Laufzeit begrenzt, best-effort, siehe
+            # app/agents/document_extraction.py.
+            volltext = extract_pdf_text(doc_url) if index < MAX_DOKUMENTE_PRO_AUSSCHREIBUNG else None
+            db.add(TenderDocument(tender_id=tender.id, url=doc_url, titel=None, volltext=volltext))
         db.commit()
         db.refresh(tender)
         ergebnis = "neu"

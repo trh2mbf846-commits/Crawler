@@ -12,8 +12,11 @@ from __future__ import annotations
 import logging
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
 
+from app.agents.digest import build_daily_digest, send_digest_webhook
+from app.config import settings
 from app.db import SessionLocal
 from app.models import Portal
 from app.pipeline import run_portal_cycle
@@ -34,6 +37,23 @@ def _run_portal_job(portal_id: str) -> None:
             logger.info("Portal-Lauf %s abgeschlossen: %s", portal.slug, ergebnis)
         except Exception:
             logger.exception("Portal-Lauf %s mit unerwartetem Fehler", portal.slug)
+    finally:
+        db.close()
+
+
+def _send_daily_digest_job() -> None:
+    """Nutzeranfrage 25.09.2026 (echte Push-Benachrichtigung statt nur Pull-Kurzbericht): baut
+
+    Kevins Kurzbericht und schickt ihn an CRAWLER_DIGEST_WEBHOOK_URL, falls konfiguriert - siehe
+    app/agents/digest.py.
+    """
+    db = SessionLocal()
+    try:
+        digest = build_daily_digest(db)
+        if send_digest_webhook(digest):
+            logger.info("Täglicher Kurzbericht per Webhook verschickt.")
+    except Exception:
+        logger.exception("Täglicher Kurzbericht konnte nicht erstellt/verschickt werden.")
     finally:
         db.close()
 
@@ -59,6 +79,16 @@ def start_scheduler() -> BackgroundScheduler:
             )
     finally:
         db.close()
+
+    if settings.digest_webhook_url:
+        scheduler.add_job(
+            _send_daily_digest_job,
+            CronTrigger(hour=settings.digest_stunde, minute=0),
+            id="daily-digest",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
 
     scheduler.start()
     _scheduler = scheduler
