@@ -5,6 +5,7 @@
 node_modules
 frontend/dist
 frontend/.env
+frontend/.build-stand
 *.local
 
 # Python-Backend

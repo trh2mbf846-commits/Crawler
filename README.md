@@ -222,6 +222,24 @@ Angebotsfrist-Feld und überschneidet sich teilweise mit TED/DTVP (dieselbe EU-A
 └── docs/            API-Vertrag, PostgreSQL-Schema, robots.txt/ToS-Dokumentation
 ```
 
+## Lokal auf dem Mac (Doppelklick)
+
+Einmalig installieren: **Python 3.11+** (https://www.python.org/downloads/) und **Node.js LTS**
+(https://nodejs.org), dann im Terminal:
+
+```bash
+git clone https://github.com/trh2mbf846-commits/Crawler.git ~/Crawler
+```
+
+Danach im Finder den Ordner `Crawler` (im Benutzerordner) öffnen und **`Crawler starten.command`**
+doppelklicken. Beim ersten Start richtet das Skript alles ein (ca. 5 Minuten), danach öffnet sich
+`http://localhost:8000` automatisch im Browser. Beenden: Terminal-Fenster schließen.
+
+- Holt bei jedem Start per `git pull` automatisch den neuesten Stand.
+- Legt `backend/.env` mit `CRAWLER_SCHEDULER_ENABLED=false` an (nur der Aktualisieren-Button
+  crawlt); für "Crawler Kevin" dort `CRAWLER_ANTHROPIC_API_KEY` eintragen und neu starten.
+- Daten bleiben in `backend/data/` zwischen den Starts erhalten.
+
 ## Schnellstart
 
 ### Backend
