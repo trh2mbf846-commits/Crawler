@@ -8,20 +8,23 @@ Dieses Verzeichnis ist ein eigenständiges Projekt innerhalb dieses Repositories
 **nichts mit dem Brettspiel-Begleit-Projekt im Repository-Root zu tun** (siehe README dort) -
 beide Projekte teilen sich lediglich den Git-Verlauf.
 
-## Aktueller Stand (Update 05.09.2026, Parallelisierung + Abdeckung)
+## Aktueller Stand (Update 25.09.2026, neues Portal Bayern)
 
-13 Portale/Quellen sind konfiguriert (3 vom Auftraggeber vorgegeben + 10 auf Nutzerwunsch
-recherchierte Zusatzquellen, Kapitel 3/16.3), davon **6 mit echtem, live verifiziertem
+14 Portale/Quellen sind konfiguriert (3 vom Auftraggeber vorgegeben + 11 auf Nutzerwunsch
+recherchierte Zusatzquellen, Kapitel 3/16.3), davon **7 mit echtem, live verifiziertem
 Connector**. Letzter kompletter Aktualisieren-Lauf (alle Portale parallel, aus leerer
-Datenbank): **6987 Ausschreibungen in 13 Minuten**:
+Datenbank): **7306 Ausschreibungen nach Duplikaterkennung in 27 Minuten** (Rohtreffer vor
+Duplikaterkennung: 7739 - Differenz vor allem durch die erwartete Überschneidung
+Bekanntmachungsservice/TED/DTVP, siehe unten):
 
 | Portal | Status | Letzter Testlauf |
 |---|---|---|
-| Bekanntmachungsservice (Bund/Länder/Kommunen) | ✅ grün | 5351 Ausschreibungen (offizielle OpenData-API, deckt teilw. auch Brandenburg/Deutsche-eVergabe-Vergabestellen ab) |
+| Bekanntmachungsservice (Bund/Länder/Kommunen) | ✅ grün | 5376 Ausschreibungen (offizielle OpenData-API, deckt teilw. auch Brandenburg/Deutsche-eVergabe-Vergabestellen ab) |
 | TED – Tenders Electronic Daily | ✅ grün | 1000 Ausschreibungen (offizielle REST-API) |
-| DTVP – Deutsches Vergabeportal | ✅ grün | 387 Ausschreibungen |
-| e-Vergabe des Bundes | ✅ grün | 130 Ausschreibungen |
-| Vergabeplattform Berlin (Vergabekooperation Berlin) | ✅ grün | 115 Ausschreibungen |
+| DTVP – Deutsches Vergabeportal | ✅ grün | 539 Ausschreibungen |
+| e-Vergabe des Bundes | ✅ grün | 300 Ausschreibungen |
+| Vergabeplattform Berlin (Vergabekooperation Berlin) | ✅ grün | 118 Ausschreibungen |
+| Vergabeplattform Bayern (vergabe.bayern.de) | ✅ grün | 402 Ausschreibungen (RIB/iTWO-Plattform, neu seit 25.09.2026) |
 | ITDZ Berlin | ✅ grün | 4 Ausschreibungen |
 | DB Bieterportal | ⚠️ Connector fertig (Playwright), scheitert nur an einer Proxy-Einschränkung *dieser* Entwicklungsumgebung (kein Login/CAPTCHA auf dem Portal) |
 | 5 weitere (Vergabe24, Vergabemarktplatz Brandenburg, Deutsche eVergabe, subreport ELViS, cosinex) | ⛔ bewusst nicht implementiert - Login-/Abo-Pflicht, robots.txt-Sperre oder Bot-Schutz, jeweils dokumentiert statt umgangen (Kapitel 9.2) |
@@ -37,7 +40,28 @@ Source Health), Job-/Eskalations-System, Ranking-Engine, Scheduler (per Konfigur
 abschaltbar, siehe Deployment unten), REST-API, manueller Aktualisieren-Button (`POST
 /api/run-all`) und Frontend (Übersicht, Filter, Suche, Detailansicht, Suchprofile,
 Quellstatus-Dashboard mit Quellen-Übersicht, Entscheidungs-Posteingang). 24 automatisierte
-Tests plus reale Testläufe gegen 6 Live-Portale mit 6987 echten Ausschreibungen.
+Tests plus reale Testläufe gegen 7 Live-Portale mit 7306 echten Ausschreibungen.
+
+### Neues Portal: Vergabeplattform Bayern (Update 25.09.2026)
+
+Nutzeranfrage: "können wir mehr Portale dazu fügen?". Recherche ergab: `vergabe.bayern.de`
+bettet seine Bekanntmachungen aus der RIB/iTWO-Plattform (`meinauftrag.rib.de`) ein - derselben
+Software-Familie, auf die ITDZ Berlin bisher nur extern verlinkt hat (siehe
+`app/agents/connector/itdz_berlin.py`), hier aber erstmals direkt als eigene Listenquelle
+genutzt. robots.txt der RIB-Plattform erlaubt automatisierten Zugriff vollständig
+("Allow: /"), Liste und Detailseiten sind ohne Login öffentlich. Live verifiziert: 402
+Ausschreibungen vollständig und ohne Duplikate abgerufen (`app/agents/connector/vergabe_bayern.py`).
+
+Dabei einen echten Bug gefunden und behoben: die serverseitige CSRF-Prüfung (Yii-Framework) der
+Pagination verlangt das Token zusätzlich als Formularfeld (`YII_CSRF_TOKEN`), nicht nur als
+`X-CSRF-Token`-Header - ohne das Formularfeld liefert der Server HTTP 200 mit einer
+HTML-Fehlerseite statt der erwarteten JSON-Antwort, was ansonsten die Pagination nach Seite 1
+stillschweigend hätte abbrechen lassen (aufgefangen durch die bestehende
+`iter_all_candidates`-Absicherung, aber ohne den Fix eben nur 20 statt 402 Treffer).
+
+RIB/iTWO wird laut Recherche als White-Label-Plattform von mehreren Bundesländern genutzt
+(ähnlich wie cosinex für DTVP/Brandenburg) - weitere Bundesländer mit eigener `filter`-ID wären
+ein nahliegender nächster Schritt für noch mehr Abdeckung (`docs/portal-notes.md`).
 
 ### Aktualisieren-Button: parallel + maximale Abdeckung (Update 05.09.2026)
 
