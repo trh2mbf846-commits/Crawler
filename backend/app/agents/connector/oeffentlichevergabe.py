@@ -18,37 +18,39 @@ Verifiziert am 05.09.2026 gegen die echte API. Befund:
   `organisationInternetAddress`/`buyerProfileURL` auf `deutsche-evergabe.de` und zahlreiche
   Brandenburg-Vergabestellen tauchen im Datensatz auf. Das deckt einen Teil der dort gehosteten,
   EU-schwellenwertigen Bekanntmachungen ab, ohne die blockierten Portale selbst anzufragen.
-- Bekannte Einschränkungen dieser CSV-Variante (bewusst nicht kompensiert, um keine falschen
-  Daten zu erzeugen):
-  1. Kein "Angebotsfrist"-Feld enthalten (nur Bindefrist/`tenderValidityDeadline` und
-     `publicOpeningDate` = Termin der öffentlichen Angebotsöffnung, beides KEIN Ersatz für die
-     Angebotsfrist selbst) - `angebotsfrist` bleibt bewusst leer, genau wie beim TED-Connector.
-  2. Da viele Bekanntmachungen ohnehin EU-weit sind, gibt es wahrscheinlich Überschneidungen mit
-     den TED-/DTVP-Datensätzen (dieselbe Ausschreibung über zwei Quellen, mit unterschiedlichen
-     IDs) - die Duplikaterkennung (Kapitel 18) arbeitet je Portal, erkennt das also nicht als
-     Duplikat. Bewusst in Kauf genommen (Nutzerentscheidung 05.09.2026): breite Abdeckung wichtiger
-     als Deduplizierung über Portalgrenzen hinweg.
-  3. Keine bestätigte, stabile Detailseiten-URL pro Bekanntmachung auf oeffentlichevergabe.de
-     gefunden (probiert: `/notice/<id>`, `/api/notices/<id>` - beides ohne Treffer). `direktlink`
-     verweist daher auf das Vergabestellen-Profil (`buyerProfileURL`/`organisationInternetAddress`),
-     ersatzweise auf die offizielle Suchoberfläche - beides echte, funktionierende Seiten, auch
-     wenn nicht exakt auf die einzelne Bekanntmachung gesprungen wird.
+- Umstellung 25.09.2026 (Nutzerrückmeldung: "viele falsch oder direkt Dokumente zum Download"):
+  statt der vereinfachten CSV-Variante wird jetzt das vollständige eForms-XML-Export
+  (`format=eforms.zip`, eine XML-Datei je Bekanntmachung) ausgewertet. Live-Befund an einem
+  Tages-Export (1121 Bekanntmachungen): Die CSV-Variante enthielt
+  1. ca. 35 % Bekanntmachungen, auf die man sich gar nicht bewerben kann (Zuschlagsmitteilungen
+     "can-*", Vertragsänderungen, Vorinformationen) - jetzt nur noch Auftragsbekanntmachungen
+     ("cn-*"), deren Angebotsfrist nicht schon abgelaufen ist;
+  2. keinen Link auf das einzelne Verfahren (nur Homepage der Vergabestelle, bei der Hälfte gar
+     nichts) - eForms enthält dagegen Abgabe-URL (BT-18) und Unterlagen-URL (BT-15), daraus
+     wählt verfahrenslink.py die Verfahrensseite auf der Vergabeplattform (97 % der offenen
+     Ausschreibungen, 0 PDF-Links; Bekanntmachungen ganz ohne verfahrensspezifischen Link werden
+     ausgelassen statt auf eine allgemeine Seite zu zeigen);
+  3. keine Angebotsfrist - eForms enthält sie (BT-131, bei ca. 87 %).
+- Überschneidungen mit TED/DTVP (dieselbe EU-Ausschreibung über mehrere Quellen) fängt die
+  portalübergreifende Duplikaterkennung ab.
 """
 from __future__ import annotations
 
-import csv
 import io
+import logging
 import zipfile
-from collections import defaultdict
 from datetime import datetime, timedelta
 
 import httpx
+from lxml import etree
 
 from app.agents.connector.base import BaseConnector, RawCandidate, RawDetail
+from app.agents.connector.verfahrenslink import ist_dateidownload, waehle_verfahrenslink
 from app.exceptions import TechnicalFailure
 
+logger = logging.getLogger("ausschreibungscrawler.oeffentlichevergabe")
+
 API_URL = "https://www.oeffentlichevergabe.de/api/notice-exports"
-SUCH_UI = "https://www.oeffentlichevergabe.de/ui/"
 
 
 class OeffentlicheVergabeConnector(BaseConnector):
@@ -71,7 +73,7 @@ class OeffentlicheVergabeConnector(BaseConnector):
 
     def fetch_list_page(self, page: int) -> tuple[list[RawCandidate], bool]:
         tag = (datetime.utcnow().date() - timedelta(days=page))
-        url = f"{API_URL}?pubDay={tag.isoformat()}&format=csv.zip"
+        url = f"{API_URL}?pubDay={tag.isoformat()}&format=eforms.zip"
 
         self._respect_rate_limit()
         try:
@@ -81,7 +83,7 @@ class OeffentlicheVergabeConnector(BaseConnector):
         if response.status_code >= 400:
             raise TechnicalFailure(f"Bekanntmachungsservice: HTTP {response.status_code} bei {tag}")
 
-        notizen = _zip_zu_notizen(response.content)
+        notizen = _zip_zu_notizen(response.content, heute=datetime.utcnow())
         candidates = [
             RawCandidate(
                 externe_id=f"{n['noticeIdentifier']}-{n['noticeVersion']}",
@@ -107,83 +109,151 @@ class OeffentlicheVergabeConnector(BaseConnector):
                 "vergabestelle": meta.get("vergabestelle"),
                 "ort_region": meta.get("ort_region"),
                 "veroeffentlichungsdatum": meta.get("veroeffentlichungsdatum"),
-                "verfahrensart": meta.get("noticeType"),
+                "verfahrensart": meta.get("verfahrensart"),
                 "cpv_codes": meta.get("cpv_codes") or [],
+                "angebotsfrist": meta.get("angebotsfrist"),
+                "geschaetzter_wert": meta.get("geschaetzter_wert"),
+                "dokumente_links": meta.get("dokumente_links") or [],
             },
         )
 
 
-def _zip_zu_notizen(zip_bytes: bytes) -> list[dict]:
-    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-        notice_rows = _lese_csv(zf, "notice.csv")
-        organisation_rows = _lese_csv(zf, "organisation.csv")
-        purpose_rows = _lese_csv(zf, "purpose.csv")
-        classification_rows = _lese_csv(zf, "classification.csv")
-        place_rows = _lese_csv(zf, "placeOfPerformance.csv")
+_VERFAHRENSARTEN = {
+    "open": "Offenes Verfahren",
+    "restricted": "Nicht offenes Verfahren",
+    "neg-w-call": "Verhandlungsverfahren mit Teilnahmewettbewerb",
+    "neg-wo-call": "Verhandlungsverfahren ohne Teilnahmewettbewerb",
+    "comp-dial": "Wettbewerblicher Dialog",
+    "innovation": "Innovationspartnerschaft",
+    "comp-tend": "Wettbewerbliches Verfahren",
+    "oth-single": "Sonstiges einstufiges Verfahren",
+    "oth-mult": "Sonstiges mehrstufiges Verfahren",
+}
 
-    def schluessel(row: dict) -> tuple[str, str]:
-        return (row["noticeIdentifier"], row["noticeVersion"])
 
-    kaeufer: dict[tuple[str, str], dict] = {}
-    for row in organisation_rows:
-        if row.get("organisationRole") == "buyer" and schluessel(row) not in kaeufer:
-            kaeufer[schluessel(row)] = row
-
-    titel_je_notiz: dict[tuple[str, str], list[str]] = defaultdict(list)
-    beschreibung_je_notiz: dict[tuple[str, str], list[str]] = defaultdict(list)
-    for row in purpose_rows:
-        k = schluessel(row)
-        if row.get("title"):
-            titel_je_notiz[k].append(row["title"])
-        if row.get("description"):
-            beschreibung_je_notiz[k].append(row["description"])
-
-    cpv_je_notiz: dict[tuple[str, str], list[str]] = defaultdict(list)
-    for row in classification_rows:
-        code = row.get("mainClassificationCode")
-        if code and code not in cpv_je_notiz[schluessel(row)]:
-            cpv_je_notiz[schluessel(row)].append(code)
-
-    ort_je_notiz: dict[tuple[str, str], str] = {}
-    for row in place_rows:
-        k = schluessel(row)
-        if k not in ort_je_notiz:
-            teile = [row.get("placePerformancePostCode"), row.get("placePerformanceCity")]
-            ort_je_notiz[k] = " ".join(t for t in teile if t).strip()
-
+def _zip_zu_notizen(zip_bytes: bytes, heute: datetime | None = None) -> list[dict]:
+    """Liest ein eForms-Tages-ZIP und liefert nur bewerbbare Ausschreibungen mit Verfahrenslink."""
     notizen = []
-    for row in notice_rows:
-        k = schluessel(row)
-        kaeufer_row = kaeufer.get(k, {})
-        titel = " | ".join(dict.fromkeys(titel_je_notiz.get(k, []))) or None
-        beschreibung = "\n\n".join(dict.fromkeys(beschreibung_je_notiz.get(k, []))) or None
-        vergabestelle = kaeufer_row.get("organisationName")
-        direktlink = (
-            kaeufer_row.get("buyerProfileURL")
-            or kaeufer_row.get("organisationInternetAddress")
-            or SUCH_UI
-        )
-        notizen.append(
-            {
-                "noticeIdentifier": row["noticeIdentifier"],
-                "noticeVersion": row["noticeVersion"],
-                "titel": titel or f"Bekanntmachung {row['noticeIdentifier'][:8]}",
-                "beschreibung": beschreibung,
-                "vergabestelle": vergabestelle,
-                "ort_region": ort_je_notiz.get(k) or None,
-                "veroeffentlichungsdatum": row.get("publicationDate"),
-                "noticeType": row.get("noticeType"),
-                "cpv_codes": cpv_je_notiz.get(k, []),
-                "direktlink": direktlink,
-            }
-        )
+    ausgelassen = {"kein_aufruf_zum_wettbewerb": 0, "frist_abgelaufen": 0, "kein_verfahrenslink": 0}
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        for dateiname in zf.namelist():
+            if not dateiname.endswith(".xml"):
+                continue
+            try:
+                wurzel = etree.fromstring(zf.read(dateiname))
+            except etree.XMLSyntaxError:
+                logger.warning("Bekanntmachungsservice: ungültiges XML %s übersprungen", dateiname)
+                continue
+            notiz, grund = _eforms_zu_notiz(wurzel, dateiname, heute)
+            if notiz is None:
+                ausgelassen[grund] += 1
+            else:
+                notizen.append(notiz)
+    logger.info("Bekanntmachungsservice: %d übernommen, ausgelassen: %s", len(notizen), ausgelassen)
     return notizen
 
 
-def _lese_csv(zf: zipfile.ZipFile, dateiname: str) -> list[dict]:
+def _texte(knoten, pfad: str) -> list[str]:
+    return [t.strip() for t in knoten.xpath(pfad) if isinstance(t, str) and t.strip()]
+
+
+def _deutsch_oder_erstes(knoten, pfad: str) -> str | None:
+    elemente = knoten.xpath(pfad)
+    for element in elemente:
+        if (element.get("languageID") or "").upper() in ("DEU", "GER") and (element.text or "").strip():
+            return element.text.strip()
+    for element in elemente:
+        if (element.text or "").strip():
+            return element.text.strip()
+    return None
+
+
+def _lokal(*namen: str) -> str:
+    """XPath über lokale Elementnamen (eForms nutzt mehrere UBL-/eForms-Namensräume)."""
+    return "/".join(f'*[local-name()="{n}"]' for n in namen)
+
+
+def _ohne_zeitzone(datum: str, uhrzeit: str | None) -> str:
+    # "2026-10-27+01:00" + "10:00:00+01:00" -> "2026-10-27T10:00:00" (naiv, wie alle anderen Felder)
+    tag = datum[:10]
+    zeit = (uhrzeit or "")[:8]
+    return f"{tag}T{zeit}" if len(zeit) == 8 else tag
+
+
+def _eforms_zu_notiz(wurzel, dateiname: str, heute: datetime | None) -> tuple[dict | None, str]:
+    typ = (_texte(wurzel, "/*/" + _lokal("NoticeTypeCode") + "/text()") or [""])[0]
+    if not typ.startswith("cn-"):
+        return None, "kein_aufruf_zum_wettbewerb"
+
+    fristen = sorted(
+        _ohne_zeitzone(periode.xpath(_lokal("EndDate") + "/text()")[0], (periode.xpath(_lokal("EndTime") + "/text()") or [None])[0])
+        for periode in wurzel.xpath("//" + _lokal("TenderSubmissionDeadlinePeriod"))
+        if periode.xpath(_lokal("EndDate") + "/text()")
+    )
+    angebotsfrist = fristen[0] if fristen else None
+    if angebotsfrist and heute and angebotsfrist[:10] < heute.date().isoformat():
+        return None, "frist_abgelaufen"
+
+    abgabe_urls = _texte(wurzel, "//" + _lokal("TenderRecipientParty", "EndpointID") + "/text()")
+    unterlagen_urls = _texte(wurzel, "//" + _lokal("CallForTendersDocumentReference") + "//" + _lokal("URI") + "/text()")
+    direktlink = waehle_verfahrenslink(abgabe_urls, unterlagen_urls)
+    if not direktlink:
+        return None, "kein_verfahrenslink"
+
+    notice_id = (_texte(wurzel, "/*/" + _lokal("ID") + "/text()") or [dateiname.rsplit("-", 1)[0]])[0]
+    version = (_texte(wurzel, "/*/" + _lokal("VersionID") + "/text()") or ["01"])[0]
+
+    projekt = "/*/" + _lokal("ProcurementProject") + "/"
+    los_projekt = "/*/" + _lokal("ProcurementProjectLot", "ProcurementProject") + "/"
+    titel = _deutsch_oder_erstes(wurzel, projekt + _lokal("Name")) or _deutsch_oder_erstes(wurzel, los_projekt + _lokal("Name"))
+    beschreibung = _deutsch_oder_erstes(wurzel, projekt + _lokal("Description")) or _deutsch_oder_erstes(
+        wurzel, los_projekt + _lokal("Description")
+    )
+
+    kaeufer_id = (_texte(wurzel, "/*/" + _lokal("ContractingParty", "Party", "PartyIdentification", "ID") + "/text()") or [None])[0]
+    vergabestelle = ort = None
+    for firma in wurzel.xpath("//" + _lokal("Organization", "Company")):
+        if kaeufer_id and kaeufer_id in _texte(firma, _lokal("PartyIdentification", "ID") + "/text()"):
+            vergabestelle = _deutsch_oder_erstes(firma, _lokal("PartyName", "Name"))
+            plz = (_texte(firma, _lokal("PostalAddress", "PostalZone") + "/text()") or [""])[0]
+            stadt = (_texte(firma, _lokal("PostalAddress", "CityName") + "/text()") or [""])[0]
+            ort = f"{plz} {stadt}".strip() or None
+            break
+    if vergabestelle is None:
+        # Vereinfachte nationale Variante (unterschwellig): Name/Adresse direkt am Auftraggeber
+        # statt über efac:Organizations referenziert.
+        partei = wurzel.xpath("/*/" + _lokal("ContractingParty", "Party"))
+        if partei:
+            vergabestelle = _deutsch_oder_erstes(partei[0], _lokal("PartyName", "Name"))
+            plz = (_texte(partei[0], _lokal("PostalAddress", "PostalZone") + "/text()") or [""])[0]
+            stadt = (_texte(partei[0], _lokal("PostalAddress", "CityName") + "/text()") or [""])[0]
+            ort = f"{plz} {stadt}".strip() or None
+    if vergabestelle:
+        vergabestelle = " ".join(vergabestelle.split())
+
+    wert_text = (_texte(wurzel, projekt + _lokal("RequestedTenderTotal", "EstimatedOverallContractAmount") + "/text()") or [None])[0]
     try:
-        with zf.open(dateiname) as f:
-            text = io.TextIOWrapper(f, encoding="utf-8")
-            return list(csv.DictReader(text))
-    except KeyError:
-        return []
+        geschaetzter_wert = float(wert_text) if wert_text else None
+    except ValueError:
+        geschaetzter_wert = None
+
+    verfahren = (_texte(wurzel, "/*/" + _lokal("TenderingProcess", "ProcedureCode") + "/text()") or [""])[0]
+
+    return {
+        "noticeIdentifier": notice_id,
+        "noticeVersion": version,
+        "titel": titel or f"Bekanntmachung {notice_id[:8]}",
+        "beschreibung": beschreibung,
+        "vergabestelle": vergabestelle,
+        "ort_region": ort,
+        "veroeffentlichungsdatum": (
+            (_texte(wurzel, "/*/" + _lokal("IssueDate") + "/text()") or _texte(wurzel, "/*/" + _lokal("RequestedPublicationDate") + "/text()") or [""])[0][:10]
+            or None
+        ),
+        "angebotsfrist": angebotsfrist,
+        "verfahrensart": _VERFAHRENSARTEN.get(verfahren, verfahren or None),
+        "cpv_codes": list(dict.fromkeys(_texte(wurzel, "//" + _lokal("MainCommodityClassification", "ItemClassificationCode") + "/text()"))),
+        "geschaetzter_wert": geschaetzter_wert,
+        "dokumente_links": list(dict.fromkeys(u for u in unterlagen_urls if ist_dateidownload(u))),
+        "direktlink": direktlink,
+    }, ""

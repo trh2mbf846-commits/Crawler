@@ -23,6 +23,7 @@ from datetime import datetime, timedelta
 import httpx
 
 from app.agents.connector.base import BaseConnector, RawCandidate, RawDetail
+from app.agents.connector.verfahrenslink import waehle_verfahrenslink
 from app.exceptions import TechnicalFailure
 
 API_URL = "https://api.ted.europa.eu/v3/notices/search"
@@ -30,6 +31,8 @@ API_URL = "https://api.ted.europa.eu/v3/notices/search"
 FIELDS = [
     "ND", "TI", "PD", "CY", "classification-cpv",
     "deadline-receipt-tender-date-lot", "description-lot", "buyer-name", "notice-type", "links",
+    # BT-18 Abgabe-URL / BT-15 Unterlagen-URL: Verfahrensseite auf der Vergabeplattform (25.09.2026)
+    "submission-url-lot", "document-url-lot",
 ]
 
 PAGE_SIZE = 50
@@ -54,7 +57,9 @@ def _ft_query() -> str:
     ]
     ft_clauses = " OR ".join(f'FT ~ "{b}"' for b in begriffe)
     cutoff = (datetime.utcnow() - timedelta(days=_FENSTER_TAGE)).strftime("%Y%m%d")
-    return f'CY = DEU AND PD >= {cutoff} AND ({ft_clauses})'
+    # form-type = competition (25.09.2026): nur Auftragsbekanntmachungen, auf die man sich bewerben
+    # kann - ohne den Filter kamen auch Zuschlagsmitteilungen (Auftrag schon vergeben) mit.
+    return f'CY = DEU AND PD >= {cutoff} AND form-type = competition AND ({ft_clauses})'
 
 
 class TedConnector(BaseConnector):
@@ -158,8 +163,26 @@ def _de_or_first(value) -> str | None:
 
 
 def _direktlink(notice: dict, nd: str) -> str:
+    # Bevorzugt die Verfahrensseite auf der Vergabeplattform, auf der man sich informieren und
+    # bewerben kann (Nutzerwunsch 25.09.2026); sonst die TED-Bekanntmachung selbst (vollständige
+    # Bekanntmachung mit allen Angaben, nie ein bloßer Download).
+    verfahrenslink = waehle_verfahrenslink(
+        _als_liste(notice.get("submission-url-lot")), _als_liste(notice.get("document-url-lot"))
+    )
+    if verfahrenslink:
+        return verfahrenslink
     links = notice.get("links") or {}
     html_direct = (links.get("htmlDirect") or {}).get("DEU") or (links.get("htmlDirect") or {}).get("ENG")
     if html_direct:
         return html_direct
     return f"https://ted.europa.eu/de/notice/-/detail/{nd}"
+
+
+def _als_liste(value) -> list[str]:
+    if not value:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [u for v in value.values() for u in _als_liste(v)]
+    return [u for u in value if isinstance(u, str)]

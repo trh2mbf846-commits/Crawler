@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from app.api import assistant, categories, escalations, portals, run, search_profiles, tenders
+from app.bereinigung import bereinige_unbrauchbare_ausschreibungen
 from app.config import settings
 from app.db import SessionLocal, init_db
 from app.scheduler import start_scheduler, stop_scheduler
@@ -25,6 +26,7 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         run_seed(db)
+        bereinige_unbrauchbare_ausschreibungen(db)
     finally:
         db.close()
     if settings.scheduler_enabled:

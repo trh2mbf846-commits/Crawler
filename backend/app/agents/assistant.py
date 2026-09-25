@@ -111,7 +111,11 @@ TOOLS = [
                 "kategorien": {"type": "array", "items": {"type": "string"}},
                 "ki_relevanz_min": {"type": "string", "enum": ["nicht", "moeglich", "stark"]},
                 "frist_bis": {"type": "string", "description": "ISO-Datum YYYY-MM-DD - nur Ausschreibungen mit Angebotsfrist bis zu diesem Datum"},
-                "status": {"type": "string", "enum": ["neu", "aktualisiert", "unveraendert", "vergeben", "abgelaufen"]},
+                "status": {
+                    "type": "string",
+                    "enum": ["offen", "alle", "neu", "aktualisiert", "unveraendert", "vergeben", "abgelaufen"],
+                    "description": "Standard: offen (nur noch bewerbbare Ausschreibungen). alle = auch abgelaufene/vergebene.",
+                },
                 "sort": {"type": "string", "enum": ["ranking", "frist", "veroeffentlichung"]},
                 "limit": {"type": "integer", "description": "Max. Anzahl Treffer (1-20), Standard 10"},
             },

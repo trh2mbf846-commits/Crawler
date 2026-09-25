@@ -43,6 +43,30 @@ Suche, Detailansicht, Suchprofile, Quellstatus-Dashboard mit Quellen-Übersicht,
 Entscheidungs-Posteingang, Crawler-Kevin-Tab). 82 automatisierte Tests plus reale Testläufe
 gegen 7 Live-Portale mit 7306 echten Ausschreibungen.
 
+### Nur bewerbbare Ausschreibungen mit Direktlink zum Verfahren (Update 25.09.2026)
+
+Nutzerrückmeldung: "viele falsch oder direkt Dokumente zum Download - es sollen professionelle
+Ausschreibungen sein, wo man sich auf der verlinkten Website direkt bewerben und informieren kann".
+Befund (live an einem Tages-Export): Der Bekanntmachungsservice (größte Quelle) lieferte ca. 35 %
+Zuschlagsmitteilungen/Vorinformationen, und seine Links zeigten nie auf das Verfahren (Homepage
+der Vergabestelle oder allgemeine Suchseite); TED filterte ebenfalls nicht auf offene Verfahren.
+Umgesetzt:
+- Bekanntmachungsservice liest jetzt das vollständige eForms-Format statt der CSV-Variante: nur
+  Auftragsbekanntmachungen (cn-*) mit nicht abgelaufener Frist, Direktlink auf die Verfahrensseite
+  der Vergabeplattform (DTVP, evergabe-online, subreport, Vergabemarktplätze …), dazu erstmals
+  Angebotsfrist, Verfahrensart und geschätzter Wert. Ohne verfahrensspezifischen Link wird eine
+  Bekanntmachung ausgelassen statt falsch verlinkt.
+- TED: nur `form-type = competition`, Direktlink ebenfalls auf die Plattform-Verfahrensseite
+  (Fallback: TED-Bekanntmachung).
+- Gemeinsame Linkauswahl `app/agents/connector/verfahrenslink.py` (Abgabe- vor Unterlagen-URL,
+  Start-/Einstiegsseiten und Datei-Downloads werden abgelehnt, subreport-ELViS-PDFs auf die
+  Verfahrensseite umgeschrieben). Live-Stichprobe: 29/30 Links laden eine echte Verfahrensseite
+  (der eine Ausreißer war nur aus der Testumgebung nicht erreichbar), 0 PDF-Links.
+- Übersicht, API und Kevin zeigen standardmäßig nur offene Ausschreibungen (Filter "Alle (auch
+  abgelaufene)" für den Rest).
+- `app/bereinigung.py` entfernt beim Start einmalig alte Zuschläge/falsch verlinkte Einträge
+  (gemerkte bleiben erhalten); "Aktualisieren" holt die offenen mit korrektem Link neu.
+
 ### KI-Assistent "Crawler Kevin" (Update 25.09.2026)
 
 Nutzeranfrage: "Richtung KI-Agent, aber die Übersicht soll bleiben", dann "Nennen wir ihn Crawler

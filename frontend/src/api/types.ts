@@ -185,7 +185,7 @@ export interface TenderQuery {
   kategorie?: string[]
   ki_relevanz_min?: 'stark' | 'moeglich'
   frist_bis?: string
-  status?: TenderStatus
+  status?: TenderStatus | 'alle'
   sort?: TenderSort
   page?: number
   page_size?: number

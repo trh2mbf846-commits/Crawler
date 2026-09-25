@@ -49,7 +49,15 @@ def search_tenders(
     if frist_bis:
         query = query.where(Tender.angebotsfrist <= datetime.combine(frist_bis, datetime.max.time()))
 
-    if status:
+    # Standard (kein Status oder "offen", Nutzerwunsch 25.09.2026): nur Ausschreibungen, auf die
+    # man sich noch bewerben kann - nicht vergeben/abgelaufen und Frist nicht verstrichen
+    # (Ausschreibungen ohne bekannte Frist bleiben drin). "alle" zeigt wirklich alles.
+    if not status or status == "offen":
+        query = query.where(
+            Tender.status.not_in(("abgelaufen", "vergeben")),
+            or_(Tender.angebotsfrist.is_(None), Tender.angebotsfrist >= datetime.now()),
+        )
+    elif status != "alle":
         query = query.where(Tender.status == status)
 
     if q:

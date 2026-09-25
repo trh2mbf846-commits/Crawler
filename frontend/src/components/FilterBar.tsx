@@ -7,7 +7,7 @@ export interface TenderFilters {
   kategorie: string[]
   ki_relevanz_min: '' | 'moeglich' | 'stark'
   frist_bis: string
-  status: '' | TenderStatus
+  status: '' | 'alle' | TenderStatus
   sort: TenderSort
 }
 
@@ -74,7 +74,8 @@ export function FilterBar({ filters, onChange, portals, categories }: FilterBarP
           onChange={(event) => set('status', event.target.value as TenderFilters['status'])}
           className="focus-ring rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs text-ink-muted"
         >
-          <option value="">Alle Status</option>
+          <option value="">Nur offene</option>
+          <option value="alle">Alle (auch abgelaufene)</option>
           {statusOptions.map((status) => (
             <option key={status} value={status}>
               {statusLabel[status]}
