@@ -62,13 +62,28 @@ class DbBieterportalConnector(BaseConnector):
         if https_proxy:
             launch_kwargs["proxy"] = {"server": https_proxy}
 
+        playwright = sync_playwright().start()
         try:
-            playwright = sync_playwright().start()
             browser = playwright.chromium.launch(**launch_kwargs)
         except Exception as exc:  # Browser-Binary fehlt o.ä.
-            raise TechnicalFailure(
-                f"Playwright-Browser konnte nicht gestartet werden ('playwright install chromium' nötig): {exc}"
-            ) from exc
+            # Fallback (Mac-Startskript, 25.09.2026): scheitert der Download von Playwrights
+            # eigenem Chromium (z. B. CDN-Timeout), reicht ein regulär installiertes Google
+            # Chrome bzw. Microsoft Edge - Playwright kann beide über `channel` steuern.
+            browser = None
+            for channel in ("chrome", "msedge"):
+                if "executable_path" in launch_kwargs:
+                    break
+                try:
+                    browser = playwright.chromium.launch(channel=channel, **launch_kwargs)
+                    break
+                except Exception:
+                    continue
+            if browser is None:
+                playwright.stop()
+                raise TechnicalFailure(
+                    "Playwright-Browser konnte nicht gestartet werden ('playwright install chromium' "
+                    f"oder ein installiertes Google Chrome nötig): {exc}"
+                ) from exc
 
         context = browser.new_context(user_agent=self._user_agent())
         # WebSocket-Upgrades werden von manchen Sandbox-Egress-Proxies nicht unterstützt

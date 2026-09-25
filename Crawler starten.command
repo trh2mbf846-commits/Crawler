@@ -11,6 +11,7 @@
 set -e
 cd "$(dirname "$0")"
 PROJEKT="$(pwd)"
+SKRIPT="$PROJEKT/$(basename "$0")"
 PORT=8000
 URL="http://localhost:$PORT"
 
@@ -46,7 +47,14 @@ fi
 # --- Updates holen (optional, Fehler z. B. ohne Internet werden ignoriert) ---------------
 if [ -d .git ]; then
   schritt "Suche nach Updates"
+  SKRIPT_VORHER="$(cksum < "$SKRIPT")"
   git pull --ff-only 2>/dev/null || echo "(kein Update geladen - es geht mit dem vorhandenen Stand weiter)"
+  # Hat das Update dieses Skript selbst geändert, läuft die Bash sonst mit der alten Fassung
+  # im Speicher weiter - daher einmal die neue Fassung neu starten.
+  if [ -z "$CRAWLER_SKRIPT_NEU_GESTARTET" ] && [ "$(cksum < "$SKRIPT")" != "$SKRIPT_VORHER" ]; then
+    export CRAWLER_SKRIPT_NEU_GESTARTET=1
+    exec "$SKRIPT" "$@"
+  fi
 fi
 
 # --- Backend einrichten ------------------------------------------------------------------
@@ -64,19 +72,28 @@ if [ ! -f .venv/.installiert ] || [ "$(cat .venv/.installiert)" != "$REQ_STAND" 
   .venv/bin/python -m pip install --upgrade pip -q
   .venv/bin/python -m pip install -r requirements.txt -q
   echo "$REQ_STAND" > .venv/.installiert
-  rm -f .venv/.browser-ok
+  rm -f .venv/.browser-ok .venv/.browser-uebersprungen
 fi
 
-# Headless-Browser nur für das DB Bieterportal - ein fehlgeschlagener Download (z. B. Timeout
-# beim Playwright-CDN) darf den Start nicht verhindern: alle anderen Portale brauchen ihn nicht.
-# Ohne Erfolgsmarker wird der Download beim nächsten Start einfach erneut versucht.
-if [ ! -f .venv/.browser-ok ]; then
-  schritt "Headless-Browser für das DB Bieterportal installieren"
-  if PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=180000 .venv/bin/python -m playwright install chromium; then
+# Headless-Browser nur für das DB Bieterportal - alle anderen Portale brauchen ihn nicht.
+# Ist Google Chrome installiert, nutzt der Connector einfach diesen (kein Download nötig).
+# Sonst genau EIN Download-Versuch: ein fehlgeschlagener Download (z. B. Timeout beim
+# Playwright-CDN) darf weder den Start verhindern noch jeden weiteren Start minutenlang aufhalten.
+if [ ! -f .venv/.browser-ok ] && [ ! -f .venv/.browser-uebersprungen ]; then
+  if [ -d "/Applications/Google Chrome.app" ] || [ -d "$HOME/Applications/Google Chrome.app" ]; then
+    echo "Google Chrome gefunden - wird für das DB Bieterportal genutzt, kein Download nötig."
     touch .venv/.browser-ok
   else
-    printf '\n\033[33mHinweis: Browser-Download fehlgeschlagen - nur das DB Bieterportal ist betroffen,\n'
-    printf 'alle anderen Portale funktionieren. Beim nächsten Start wird es erneut versucht.\033[0m\n'
+    schritt "Headless-Browser für das DB Bieterportal installieren"
+    if PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=180000 .venv/bin/python -m playwright install chromium; then
+      touch .venv/.browser-ok
+    else
+      touch .venv/.browser-uebersprungen
+      printf '\n\033[33mHinweis: Browser-Download fehlgeschlagen - nur das DB Bieterportal ist betroffen,\n'
+      printf 'alle anderen Portale funktionieren. Abhilfe: Google Chrome installieren, oder den Download\n'
+      printf 'später manuell wiederholen mit:\n'
+      printf '  ~/Crawler/backend/.venv/bin/python -m playwright install chromium\033[0m\n'
+    fi
   fi
 fi
 
