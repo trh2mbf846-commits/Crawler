@@ -9,8 +9,9 @@ from app.agents.assistant import (
     execute_assistant_action,
     run_assistant_chat,
 )
+from app.agents.assistant import _build_system_prompt
 from app.agents.duplicate import run_duplicate
-from app.models import SearchProfile, Tender
+from app.models import AssistantPreferences, SearchProfile, Tender
 
 
 class FakeTextBlock:
@@ -208,3 +209,23 @@ def test_execute_unbekannte_aktion_schlaegt_fehl(db):
     ergebnis = execute_assistant_action(db, "loesche_alles", {})
 
     assert ergebnis.erfolg is False
+
+
+def test_systemprompt_ohne_praeferenzen_zeigt_hinweis(db):
+    prompt = _build_system_prompt(db)
+
+    assert "noch keine hinterlegt" in prompt
+
+
+def test_systemprompt_enthaelt_gesetzte_praeferenzen(db):
+    db.add(AssistantPreferences(
+        id="singleton", prioritaeten_text="Fokus auf KI in Bayern",
+        bevorzugte_kategorien=["KI & Machine Learning"], mindestwert=50000.0,
+    ))
+    db.commit()
+
+    prompt = _build_system_prompt(db)
+
+    assert "Fokus auf KI in Bayern" in prompt
+    assert "KI & Machine Learning" in prompt
+    assert "50.000" in prompt or "50,000" in prompt

@@ -33,7 +33,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import Portal, SearchProfile, Tender
+from app.models import AssistantPreferences, Portal, SearchProfile, Tender
 from app.serializers import portal_to_health_out
 from app.tender_queries import search_tenders
 
@@ -66,8 +66,11 @@ SYSTEM_TEMPLATE = (
     "wenn Vincent danach fragt oder es offensichtlich sinnvoll ist - diese werden ihm aber immer "
     "erst zur Bestätigung vorgelegt, du führst sie nie direkt aus. Rufe pro Antwort höchstens "
     "eines dieser drei Werkzeuge auf.\n\n"
+    "Vincents Prioritäten (versetze dich in seine Position, wenn du Treffer einordnest oder "
+    "Vorschläge machst - ohne dass er das jedes Mal wiederholen muss):\n{prioritaeten}\n\n"
     "Aktuell aktive Portale (Slug - Name):\n{portale}"
 )
+_KEINE_PRIORITAETEN_HINWEIS = "(noch keine hinterlegt - frag ihn gerne danach, oder er trägt sie unter „Präferenzen“ ein)"
 
 TOOLS = [
     {
@@ -183,10 +186,29 @@ def _parse_iso_date(value: str | None) -> date | None:
         return None
 
 
+def _formatiere_prioritaeten(praeferenzen: AssistantPreferences | None) -> str:
+    if praeferenzen is None:
+        return _KEINE_PRIORITAETEN_HINWEIS
+    teile = []
+    if praeferenzen.prioritaeten_text:
+        teile.append(praeferenzen.prioritaeten_text)
+    if praeferenzen.bevorzugte_kategorien:
+        teile.append(f"Bevorzugte Kategorien: {', '.join(praeferenzen.bevorzugte_kategorien)}")
+    if praeferenzen.bevorzugte_regionen:
+        teile.append(f"Bevorzugte Regionen: {', '.join(praeferenzen.bevorzugte_regionen)}")
+    if praeferenzen.mindestwert is not None:
+        teile.append(f"Mindestwert: {praeferenzen.mindestwert:,.0f} €")
+    return "\n".join(f"- {t}" for t in teile) if teile else _KEINE_PRIORITAETEN_HINWEIS
+
+
 def _build_system_prompt(db: Session) -> str:
     portale = db.scalars(select(Portal).where(Portal.aktiv.is_(True)).order_by(Portal.name)).all()
     zeilen = "\n".join(f"- {p.slug}: {p.name}" for p in portale)
-    return SYSTEM_TEMPLATE.format(portale=zeilen or "(keine aktiven Portale)")
+    praeferenzen = db.get(AssistantPreferences, "singleton")
+    return SYSTEM_TEMPLATE.format(
+        portale=zeilen or "(keine aktiven Portale)",
+        prioritaeten=_formatiere_prioritaeten(praeferenzen),
+    )
 
 
 def _tool_suche_ausschreibungen(db: Session, tool_input: dict, gefundene: dict[str, Tender]) -> dict:

@@ -85,3 +85,25 @@ def test_assistant_actions_execute_unbekannte_aktion(db):
     response = client.post("/api/assistant/actions/execute", json={"name": "unbekannt", "input": {}})
     assert response.status_code == 200
     assert response.json()["erfolg"] is False
+
+
+def test_assistant_digest(db, portal):
+    response = client.get("/api/assistant/digest")
+    assert response.status_code == 200
+    assert "text" in response.json()
+
+
+def test_assistant_preferences_get_und_put(db):
+    get_response = client.get("/api/assistant/preferences")
+    assert get_response.status_code == 200
+    assert get_response.json()["prioritaeten_text"] is None
+
+    put_response = client.put(
+        "/api/assistant/preferences",
+        json={"prioritaeten_text": "Fokus auf KI", "bevorzugte_kategorien": [], "bevorzugte_regionen": [], "mindestwert": None},
+    )
+    assert put_response.status_code == 200
+    assert put_response.json()["prioritaeten_text"] == "Fokus auf KI"
+
+    erneut = client.get("/api/assistant/preferences")
+    assert erneut.json()["prioritaeten_text"] == "Fokus auf KI"

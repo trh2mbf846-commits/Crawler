@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -11,6 +11,7 @@ from app.api import assistant, categories, escalations, portals, run, search_pro
 from app.config import settings
 from app.db import SessionLocal, init_db
 from app.scheduler import start_scheduler, stop_scheduler
+from app.security import require_api_key
 from app.seed import run_seed
 
 # Vom Docker-Build erzeugtes Frontend-Bundle (siehe Dockerfile) - lokal (npm run dev) existiert
@@ -42,13 +43,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(tenders.router, prefix="/api")
-app.include_router(portals.router, prefix="/api")
-app.include_router(search_profiles.router, prefix="/api")
-app.include_router(escalations.router, prefix="/api")
-app.include_router(categories.router, prefix="/api")
-app.include_router(run.router, prefix="/api")
-app.include_router(assistant.router, prefix="/api")
+_geschuetzt = [Depends(require_api_key)]
+app.include_router(tenders.router, prefix="/api", dependencies=_geschuetzt)
+app.include_router(portals.router, prefix="/api", dependencies=_geschuetzt)
+app.include_router(search_profiles.router, prefix="/api", dependencies=_geschuetzt)
+app.include_router(escalations.router, prefix="/api", dependencies=_geschuetzt)
+app.include_router(categories.router, prefix="/api", dependencies=_geschuetzt)
+app.include_router(run.router, prefix="/api", dependencies=_geschuetzt)
+app.include_router(assistant.router, prefix="/api", dependencies=_geschuetzt)
 
 
 @app.get("/api/health")

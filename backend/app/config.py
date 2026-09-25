@@ -36,6 +36,13 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:5174", "http://127.0.0.1:5174"]
 
+    # API-Absicherung (Nutzeranfrage 25.09.2026): seit Crawler Kevin echte Aktionen auslösen kann
+    # (Läufe starten, Suchprofile anlegen, Datensätze ändern), wiegt eine komplett offene API
+    # deutlich schwerer. Ohne gesetzten Schlüssel bleibt die API wie bisher offen
+    # (Entwicklungs-Default) - für ein echtes Deployment sollte er gesetzt werden, siehe
+    # app/security.py und README (Deployment-Abschnitt).
+    api_key: str | None = None
+
     # Nutzerwunsch (01.09.2026): kein dauerhaftes Hintergrund-Update, sondern ein manueller
     # Aktualisieren-Button (siehe api/run.py). Für lokale Entwicklung/Tests bleibt der
     # periodische Scheduler an; im on-demand-Deployment (render.yaml) wird er per

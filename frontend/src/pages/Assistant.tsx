@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiError, executeAssistantAction, sendAssistantMessage } from '../api/client'
-import type { AssistantActionProposal, AssistantMessage, Tender } from '../api/types'
+import {
+  ApiError,
+  executeAssistantAction,
+  fetchAssistantDigest,
+  fetchAssistantPreferences,
+  sendAssistantMessage,
+  updateAssistantPreferences,
+} from '../api/client'
+import type { AssistantActionProposal, AssistantMessage, AssistantPreferences, Tender } from '../api/types'
+import { CATEGORIES } from '../api/types'
 import { TenderCard } from '../components/TenderCard'
 
 interface ChatEntry extends AssistantMessage {
@@ -17,6 +25,155 @@ const BEISPIELE = [
   'Wie ist der aktuelle Quellstatus?',
 ]
 
+const LEERE_PRAEFERENZEN: AssistantPreferences = {
+  prioritaeten_text: null,
+  bevorzugte_kategorien: [],
+  bevorzugte_regionen: [],
+  mindestwert: null,
+}
+
+function PraeferenzenPanel({ onClose }: { onClose: () => void }) {
+  const [praeferenzen, setPraeferenzen] = useState<AssistantPreferences>(LEERE_PRAEFERENZEN)
+  const [regionenText, setRegionenText] = useState('')
+  const [ladend, setLadend] = useState(true)
+  const [speichernd, setSpeichernd] = useState(false)
+  const [fehler, setFehler] = useState<string | null>(null)
+  const [gespeichert, setGespeichert] = useState(false)
+
+  useEffect(() => {
+    fetchAssistantPreferences()
+      .then((p) => {
+        setPraeferenzen(p)
+        setRegionenText(p.bevorzugte_regionen.join(', '))
+      })
+      .catch(() => setFehler('Präferenzen konnten nicht geladen werden.'))
+      .finally(() => setLadend(false))
+  }, [])
+
+  const toggleKategorie = (kategorie: string) => {
+    setPraeferenzen((prev) => ({
+      ...prev,
+      bevorzugte_kategorien: prev.bevorzugte_kategorien.includes(kategorie)
+        ? prev.bevorzugte_kategorien.filter((k) => k !== kategorie)
+        : [...prev.bevorzugte_kategorien, kategorie],
+    }))
+  }
+
+  const speichern = async () => {
+    setSpeichernd(true)
+    setFehler(null)
+    setGespeichert(false)
+    try {
+      const payload: AssistantPreferences = {
+        ...praeferenzen,
+        bevorzugte_regionen: regionenText
+          .split(',')
+          .map((r) => r.trim())
+          .filter(Boolean),
+      }
+      const aktualisiert = await updateAssistantPreferences(payload)
+      setPraeferenzen(aktualisiert)
+      setGespeichert(true)
+    } catch (err) {
+      setFehler(err instanceof ApiError ? err.message : 'Präferenzen konnten nicht gespeichert werden.')
+    } finally {
+      setSpeichernd(false)
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-line bg-surface p-4 shadow-card">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-ink">Deine Prioritäten für Kevin</h2>
+        <button type="button" onClick={onClose} className="focus-ring rounded text-xs text-ink-muted hover:text-ink">
+          Schließen
+        </button>
+      </div>
+      <p className="mt-1 text-xs text-ink-muted">
+        Kevin berücksichtigt das in Antworten, Vorschlägen und im täglichen Kurzbericht.
+      </p>
+
+      {ladend ? (
+        <p className="mt-3 text-xs text-ink-muted">Lädt…</p>
+      ) : (
+        <div className="mt-3 flex flex-col gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-ink-muted">Freitext (z. B. Fokus, Ausschlusskriterien)</span>
+            <textarea
+              value={praeferenzen.prioritaeten_text ?? ''}
+              onChange={(e) => setPraeferenzen((prev) => ({ ...prev, prioritaeten_text: e.target.value }))}
+              rows={2}
+              placeholder="z. B. Fokus auf KI/Cloud-Projekte, Fristen unter 2 Wochen sind besonders dringend"
+              className="focus-ring resize-none rounded-md border border-line bg-surface px-3 py-2 text-sm placeholder:text-ink-faint"
+            />
+          </label>
+
+          <div>
+            <span className="text-xs font-medium text-ink-muted">Bevorzugte Kategorien</span>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {CATEGORIES.map((kategorie) => (
+                <button
+                  key={kategorie}
+                  type="button"
+                  onClick={() => toggleKategorie(kategorie)}
+                  className={`focus-ring rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                    praeferenzen.bevorzugte_kategorien.includes(kategorie)
+                      ? 'border-brand bg-brand-light text-brand'
+                      : 'border-line text-ink-muted hover:bg-surface-sunken'
+                  }`}
+                >
+                  {kategorie}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-ink-muted">Bevorzugte Regionen (kommagetrennt)</span>
+            <input
+              type="text"
+              value={regionenText}
+              onChange={(e) => setRegionenText(e.target.value)}
+              placeholder="z. B. Berlin, Bayern"
+              className="focus-ring rounded-md border border-line bg-surface px-3 py-2 text-sm placeholder:text-ink-faint"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-ink-muted">Mindestwert (€)</span>
+            <input
+              type="number"
+              value={praeferenzen.mindestwert ?? ''}
+              onChange={(e) =>
+                setPraeferenzen((prev) => ({
+                  ...prev,
+                  mindestwert: e.target.value === '' ? null : Number(e.target.value),
+                }))
+              }
+              placeholder="z. B. 50000"
+              className="focus-ring rounded-md border border-line bg-surface px-3 py-2 text-sm placeholder:text-ink-faint"
+            />
+          </label>
+
+          {fehler ? <p className="text-xs text-urgent-red">{fehler}</p> : null}
+          {gespeichert ? <p className="text-xs text-ink-muted">Gespeichert.</p> : null}
+
+          <div>
+            <button
+              type="button"
+              disabled={speichernd}
+              onClick={() => void speichern()}
+              className="focus-ring rounded-md bg-brand px-4 py-1.5 text-sm font-medium text-white hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {speichernd ? 'Speichert…' : 'Speichern'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function Assistant() {
   const [verlauf, setVerlauf] = useState<ChatEntry[]>([])
   const [eingabe, setEingabe] = useState('')
@@ -25,11 +182,30 @@ export function Assistant() {
   const [nichtKonfiguriert, setNichtKonfiguriert] = useState(false)
   const [aktionStatus, setAktionStatus] = useState<Record<string, AktionStatus>>({})
   const [aktionLaeuft, setAktionLaeuft] = useState<string | null>(null)
+  const [praeferenzenOffen, setPraeferenzenOffen] = useState(false)
   const endeRef = useRef<HTMLDivElement>(null)
+  const digestGeladen = useRef(false)
 
   useEffect(() => {
     endeRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [verlauf, aktionStatus])
+
+  useEffect(() => {
+    if (digestGeladen.current) return
+    digestGeladen.current = true
+    fetchAssistantDigest()
+      .then((digest) => {
+        setVerlauf((prev) =>
+          prev.length > 0
+            ? prev
+            : [{ id: crypto.randomUUID(), rolle: 'assistant', text: `Guten Tag! Dein Kurzbericht:\n\n${digest.text}`, tenders: digest.tenders }]
+        )
+      })
+      .catch(() => {
+        // Kurzbericht ist ein Bonus, kein kritischer Pfad - bei Fehler bleibt einfach die
+        // normale Begrüßung mit den Beispiel-Fragen stehen.
+      })
+  }, [])
 
   const absenden = useCallback(
     async (text: string) => {
@@ -93,15 +269,26 @@ export function Assistant() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-semibold text-ink">Crawler Kevin</h1>
-        <p className="mt-0.5 text-sm text-ink-muted">
-          Dein KI-Kollege für die Ausschreibungssuche – frag ihn in natürlicher Sprache zu erfassten
-          Ausschreibungen und zum Quellstatus. Ergänzt die Übersicht, ersetzt sie nicht: Kevin kann einen
-          Aktualisieren-Lauf anstoßen, ein Suchprofil anlegen oder eine Ausschreibung merken – schlägt das
-          aber nur vor, ausgeführt wird erst nach deiner Bestätigung.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-ink">Crawler Kevin</h1>
+          <p className="mt-0.5 text-sm text-ink-muted">
+            Dein KI-Kollege für die Ausschreibungssuche – frag ihn in natürlicher Sprache zu erfassten
+            Ausschreibungen und zum Quellstatus. Ergänzt die Übersicht, ersetzt sie nicht: Kevin kann einen
+            Aktualisieren-Lauf anstoßen, ein Suchprofil anlegen oder eine Ausschreibung merken – schlägt das
+            aber nur vor, ausgeführt wird erst nach deiner Bestätigung.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setPraeferenzenOffen((prev) => !prev)}
+          className="focus-ring shrink-0 rounded-md border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-muted hover:bg-surface-sunken hover:text-ink"
+        >
+          ⚙ Präferenzen
+        </button>
       </div>
+
+      {praeferenzenOffen ? <PraeferenzenPanel onClose={() => setPraeferenzenOffen(false)} /> : null}
 
       {nichtKonfiguriert ? (
         <div className="rounded-md border border-line bg-surface-sunken px-4 py-3 text-sm text-ink-muted">

@@ -94,6 +94,18 @@ CREATE TABLE tender_categories (
   PRIMARY KEY (tender_id, category_id)
 );
 
+-- Zusatz (25.09.2026): Vincents Prioritäten für Crawler Kevin ("Kevin soll sich in meine
+-- Position versetzen") - Singleton-Tabelle (eine Zeile), kein eigenes Benutzerkonto-System,
+-- da diese Anwendung nur einen Nutzer hat.
+CREATE TABLE assistant_preferences (
+  id                    TEXT PRIMARY KEY DEFAULT 'singleton',
+  prioritaeten_text     TEXT,
+  bevorzugte_kategorien TEXT[],
+  bevorzugte_regionen   TEXT[],
+  mindestwert           NUMERIC,
+  aktualisiert_am       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Suchprofile (Kapitel 8.2)
 CREATE TABLE search_profiles (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),

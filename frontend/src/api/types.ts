@@ -164,6 +164,21 @@ export interface AssistantActionResult {
   meldung: string
 }
 
+export interface AssistantPreferences {
+  prioritaeten_text: string | null
+  bevorzugte_kategorien: string[]
+  bevorzugte_regionen: string[]
+  mindestwert: number | null
+}
+
+export interface AssistantDigest {
+  text: string
+  neue_relevante_anzahl: number
+  bald_ablaufend_anzahl: number
+  portale_mit_problem: string[]
+  tenders: Tender[]
+}
+
 export interface TenderQuery {
   q?: string
   portal?: string[]

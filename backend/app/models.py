@@ -159,6 +159,24 @@ class TenderCategory(Base):
     category: Mapped[Category] = relationship(back_populates="tenders")
 
 
+class AssistantPreferences(Base):
+    """Vincents Prioritäten für Crawler Kevin (Nutzeranfrage 25.09.2026: "Kevin soll sich in
+
+    meine Position versetzen"). Bewusst ein Singleton (eine Zeile, feste id) statt ein eigenes
+    Benutzerkonto-System - diese Anwendung hat nur einen Nutzer (Kapitel 5.2: kein
+    überdimensionierter Mechanismus). Fließt in Kevins Systemprompt (app/agents/assistant.py)
+    und in den täglichen Kurzbericht (app/agents/digest.py) ein.
+    """
+    __tablename__ = "assistant_preferences"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: "singleton")
+    prioritaeten_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bevorzugte_kategorien: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    bevorzugte_regionen: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    mindestwert: Mapped[float | None] = mapped_column(Float, nullable=True)
+    aktualisiert_am: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class SearchProfile(Base):
     __tablename__ = "search_profiles"
 

@@ -40,7 +40,7 @@ Source Health), Job-/Eskalations-System, Ranking-Engine, Scheduler (per Konfigur
 abschaltbar, siehe Deployment unten), REST-API, manueller Aktualisieren-Button (`POST
 /api/run-all`), KI-Assistent "Crawler Kevin" (siehe unten) und Frontend (Übersicht, Filter,
 Suche, Detailansicht, Suchprofile, Quellstatus-Dashboard mit Quellen-Übersicht,
-Entscheidungs-Posteingang, Crawler-Kevin-Tab). 48 automatisierte Tests plus reale Testläufe
+Entscheidungs-Posteingang, Crawler-Kevin-Tab). 63 automatisierte Tests plus reale Testläufe
 gegen 7 Live-Portale mit 7306 echten Ausschreibungen.
 
 ### KI-Assistent "Crawler Kevin" (Update 25.09.2026)
@@ -79,6 +79,36 @@ gefunden und behoben: der `tender_queries`-Refactor hatte versehentlich den `Ten
 bestehender Test hatte die HTTP-Schicht dieses Endpunkts abgedeckt. Als Konsequenz neue
 `tests/test_api_smoke.py`: mindestens ein durchgehender HTTP-Aufruf pro Router, damit ein
 kaputter Import künftig schon im schnellen Testlauf auffällt statt erst im Browser.
+
+### API-Absicherung, proaktiver Kurzbericht, Kevins Kontext (Update 25.09.2026)
+
+Nutzeranfrage nach "was würdest du empfehlen noch auszubauen?": "alle drei Sachen" - API-
+Absicherung, proaktives Kevin, Kevin kennt meinen Kontext. Umgesetzt:
+
+- **API-Absicherung** (`backend/app/security.py`): seit Kevin echte Aktionen auslösen kann, wiegt
+  eine komplett offene API schwerer. Optionaler gemeinsamer Schlüssel statt vollem Login-System
+  (Kapitel 5.2, nur ein Nutzer) - `CRAWLER_API_KEY` auf dem Server, `VITE_API_KEY` im Frontend,
+  Header `X-API-Key`, zeitkonstanter Vergleich (`hmac.compare_digest`). Ohne gesetzten Schlüssel
+  bleibt die API wie bisher offen (Entwicklungs-Default); `/api/health` bleibt für
+  Load-Balancer-Checks immer ungeschützt. Live end-to-end verifiziert: 401 ohne/mit falschem
+  Header, 200 mit richtigem, Frontend hängt den Header nachweislich an echte Requests.
+- **Kevins Kontext** (`AssistantPreferences`, Singleton-Tabelle): Vincents Prioritäten
+  (Freitext, bevorzugte Kategorien/Regionen, Mindestwert), einstellbar über ein neues
+  "⚙ Präferenzen"-Panel auf Kevins Seite. Fließen in Kevins Systemprompt ein (`_build_system_prompt`
+  in `app/agents/assistant.py`) - "Kevin soll sich in meine Position versetzen", ohne dass
+  Vincent das in jeder Frage wiederholen muss.
+- **Proaktiver Kurzbericht** (`app/agents/digest.py`, `GET /assistant/digest`): rein
+  deterministisch aus der Datenbank berechnet (kein LLM nötig, funktioniert also auch ohne
+  API-Key) - neue KI-relevante Ausschreibungen der letzten 24h, Fristen der nächsten 7 Tage bei
+  gemerkten/relevanten Ausschreibungen, Portale mit Problemen, unter Berücksichtigung der
+  Prioritäten. Kevins Chat-Seite lädt das beim Öffnen automatisch als erste Nachricht, statt dass
+  Vincent erst fragen muss.
+
+Live per Playwright verifiziert: Kurzbericht lädt automatisch und zeigt eine real erfasste,
+bald ablaufende Ausschreibung korrekt an; Präferenzen speichern und wirken sofort im nächsten
+Kurzbericht (auf derselben Datenbank neu geladen bestätigt). Dabei einen kleinen Darstellungsfehler
+gefunden und behoben: der Kurzbericht-Text nutzte `**Markdown**`-Sternchen, die im Chat nirgends
+gerendert wurden - jetzt reiner Text.
 
 ### Neues Portal: Vergabeplattform Bayern (Update 25.09.2026)
 
@@ -209,6 +239,14 @@ setzen - dann reicht das Dockerfile allein.
 
 **Fly.io:** `fly.toml` liegt direkt in diesem Ordner. Von hier aus (`cd ausschreibungscrawler`)
 `fly launch --no-deploy` (App-Name ggf. anpassen, muss global eindeutig sein), dann `fly deploy`.
+
+**API-Absicherung (empfohlen für ein öffentlich erreichbares Deployment):** ohne gesetzten
+Schlüssel ist die API vollständig offen (praktisch für lokale Entwicklung, aber seit Crawler
+Kevin echte Aktionen auslösen kann - Läufe starten, Suchprofile anlegen, Datensätze ändern - ein
+echtes Risiko bei einem öffentlichen Link). Vor dem Deployment einen zufälligen Wert für
+`CRAWLER_API_KEY` als Umgebungsvariable des Backend-Dienstes setzen und denselben Wert beim
+Docker-Build als `--build-arg VITE_API_KEY=...` mitgeben (backt ihn ins ausgelieferte Frontend
+ein, siehe Dockerfile und `app/security.py`).
 
 **Persistenz:** Ohne bezahlten Disk-Zusatz verliert die SQLite-Datenbank ihren Inhalt bei jedem
 Neustart/Redeploy - beim nächsten Klick auf "Aktualisieren" ist die Liste aber sofort wieder

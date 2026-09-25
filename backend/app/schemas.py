@@ -176,3 +176,22 @@ class AssistantActionIn(BaseModel):
 class AssistantActionOut(BaseModel):
     erfolg: bool
     meldung: str
+
+
+class AssistantPreferencesIn(BaseModel):
+    prioritaeten_text: str | None = None
+    bevorzugte_kategorien: list[str] = []
+    bevorzugte_regionen: list[str] = []
+    mindestwert: float | None = None
+
+
+class AssistantPreferencesOut(AssistantPreferencesIn):
+    aktualisiert_am: datetime
+
+
+class AssistantDigestOut(BaseModel):
+    text: str
+    neue_relevante_anzahl: int
+    bald_ablaufend_anzahl: int
+    portale_mit_problem: list[str]
+    tenders: list[TenderOut]

@@ -37,4 +37,10 @@ services:
       # Keyword-/CPV-Klassifikation unverändert weiter, dieser Schritt wird nur übersprungen.
       - key: CRAWLER_ANTHROPIC_API_KEY
         sync: false
+      # Optional (25.09.2026, API-Absicherung, siehe app/security.py): ohne gesetzten Wert
+      # bleibt die API offen. Für ein öffentlich erreichbares Deployment empfohlen - dann beim
+      # Docker-Build zusätzlich denselben Wert als --build-arg VITE_API_KEY=... mitgeben (siehe
+      # Dockerfile), sonst kann das ausgelieferte Frontend selbst nicht mehr auf die API zugreifen.
+      - key: CRAWLER_API_KEY
+        sync: false
     healthCheckPath: /api/health

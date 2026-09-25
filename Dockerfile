@@ -16,6 +16,11 @@ RUN npm ci
 COPY frontend/ ./
 # Gleicher Ursprung wie die API (kein CORS/keine feste Domain nötig) - siehe main.py "spa"-Route.
 ENV VITE_API_BASE_URL=/api
+# Optional (Nutzeranfrage 25.09.2026, API-Absicherung): beim Build mitgeben, z. B.
+# `docker build --build-arg VITE_API_KEY=... .`, muss zum Backend-seitigen CRAWLER_API_KEY
+# passen (siehe app/security.py). Leer lassen = API bleibt offen (Entwicklungs-Default).
+ARG VITE_API_KEY=""
+ENV VITE_API_KEY=${VITE_API_KEY}
 RUN npm run build
 
 # ---------- Stage 2: Backend + ausgeliefertes Frontend ----------

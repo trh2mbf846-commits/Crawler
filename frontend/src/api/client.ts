@@ -1,7 +1,9 @@
 import type {
   AssistantActionResult,
   AssistantChatResult,
+  AssistantDigest,
   AssistantMessage,
+  AssistantPreferences,
   Escalation,
   EscalationStatus,
   HistoryEntry,
@@ -15,6 +17,10 @@ import type {
 } from './types'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000/api'
+// Nutzeranfrage 25.09.2026: Backend akzeptiert optional einen X-API-Key-Header (app/security.py).
+// Ohne CRAWLER_API_KEY auf dem Server ignoriert er diesen Header einfach - lokal ohne
+// VITE_API_KEY bleibt alles wie bisher.
+const API_KEY = import.meta.env.VITE_API_KEY as string | undefined
 
 export class ApiError extends Error {
   status: number
@@ -33,6 +39,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       headers: {
         Accept: 'application/json',
         ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(API_KEY ? { 'X-API-Key': API_KEY } : {}),
       },
       ...init,
     })
@@ -176,5 +183,20 @@ export function executeAssistantAction(name: string, input: Record<string, unkno
   return request<AssistantActionResult>('/assistant/actions/execute', {
     method: 'POST',
     body: JSON.stringify({ name, input }),
+  })
+}
+
+export function fetchAssistantDigest(): Promise<AssistantDigest> {
+  return request<AssistantDigest>('/assistant/digest')
+}
+
+export function fetchAssistantPreferences(): Promise<AssistantPreferences> {
+  return request<AssistantPreferences>('/assistant/preferences')
+}
+
+export function updateAssistantPreferences(preferences: AssistantPreferences): Promise<AssistantPreferences> {
+  return request<AssistantPreferences>('/assistant/preferences', {
+    method: 'PUT',
+    body: JSON.stringify(preferences),
   })
 }
