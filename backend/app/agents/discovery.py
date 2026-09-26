@@ -6,15 +6,28 @@ fachliche Frage "welche Kandidaten gibt es gerade und welche davon sind neu für
 """
 from __future__ import annotations
 
-from datetime import datetime
+import hashlib
+import json
+from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app import queue
 from app.agents.connector import CONNECTORS
+from app.agents.connector.base import RawCandidate
+from app.config import settings
 from app.exceptions import AccessBlocked, TechnicalFailure
-from app.models import Job, Portal, Tender
+from app.models import Job, KandidatenStand, Portal, Tender
+
+
+def fingerabdruck(candidate: RawCandidate) -> str:
+    """Stabiler Hash der Listendaten (Frist, Vergabestelle, Titel, Link …) eines Kandidaten."""
+    daten = json.dumps(
+        [candidate.detail_url, candidate.titel_hint, candidate.listen_metadaten],
+        sort_keys=True, default=str, ensure_ascii=False,
+    )
+    return hashlib.sha1(daten.encode("utf-8")).hexdigest()
 
 
 def run_discovery(db: Session, job: Job) -> dict:
@@ -45,8 +58,34 @@ def run_discovery(db: Session, job: Job) -> dict:
     }
     current_ids = {c.externe_id for c in candidates}
 
+    # Inkrementell (26.09.2026): bekannte Ausschreibungen mit unveränderten Listendaten, die vor
+    # kurzem schon im Detail abgerufen wurden, überspringen.
+    staende = {
+        s.externe_id: s
+        for s in db.scalars(select(KandidatenStand).where(KandidatenStand.portal_id == portal.id))
+    }
+    jetzt = datetime.utcnow()
+    frisch_ab = jetzt - timedelta(days=settings.detail_neupruefung_tage)
+
     enqueued = 0
+    unveraendert: list[str] = []
     for candidate in candidates:
+        fp = fingerabdruck(candidate)
+        stand = staende.get(candidate.externe_id)
+        if (
+            candidate.externe_id in known_ids
+            and stand is not None
+            and stand.fingerabdruck == fp
+            and stand.zuletzt_abgerufen_am >= frisch_ab
+        ):
+            unveraendert.append(candidate.externe_id)
+            continue
+        if stand is None:
+            stand = KandidatenStand(portal_id=portal.id, externe_id=candidate.externe_id, fingerabdruck=fp)
+            db.add(stand)
+            staende[candidate.externe_id] = stand
+        stand.fingerabdruck = fp
+        stand.zuletzt_abgerufen_am = jetzt
         queue.enqueue(
             db,
             "analysis",
@@ -60,6 +99,16 @@ def run_discovery(db: Session, job: Job) -> dict:
             },
         )
         enqueued += 1
+
+    # Weiterhin in der Liste des Portals - also noch aktuell, nur nicht erneut abgerufen. In Blöcken,
+    # damit ältere SQLite-Versionen (Grenze 999 Parameter je Anweisung) nicht scheitern.
+    for start in range(0, len(unveraendert), 500):
+        db.execute(
+            update(Tender)
+            .where(Tender.portal_id == portal.id, Tender.externe_id.in_(unveraendert[start:start + 500]))
+            .values(zuletzt_geprueft_am=jetzt)
+        )
+    db.commit()
 
     verschwunden = known_ids - current_ids
     abgelaufen_markiert = 0
@@ -77,5 +126,6 @@ def run_discovery(db: Session, job: Job) -> dict:
     return {
         "kandidaten_gesamt": len(candidates),
         "neu_oder_zu_pruefen": enqueued,
+        "unveraendert_uebersprungen": len(unveraendert),
         "als_abgelaufen_markiert": abgelaufen_markiert,
     }

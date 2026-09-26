@@ -40,7 +40,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import AssistantPreferences, Category, Portal, SearchProfile, Tender
+from app.models import AssistantPreferences, Category, Portal, SearchProfile, Tender, Verbesserungswunsch
+from app.prompts import llm_anbieter
 from app.serializers import portal_to_health_out
 from app.tender_queries import search_tenders
 
@@ -85,10 +86,17 @@ SYSTEM_TEMPLATE = (
     "- Wenn eine Frage mit den Werkzeugen nicht beantwortbar ist, sag das ehrlich statt zu "
     "spekulieren.\n"
     "- Antworte auf Deutsch, prägnant, ohne Floskeln.\n"
-    "- Du darfst aktualisieren_starten, suchprofil_anlegen und ausschreibung_merken aufrufen, "
+    "- Du darfst aktualisieren_starten, suchprofil_anlegen, ausschreibung_merken und "
+    "verbesserungswunsch_notieren aufrufen, "
     "wenn Vincent danach fragt oder es offensichtlich sinnvoll ist - diese werden ihm aber immer "
     "erst zur Bestätigung vorgelegt, du führst sie nie direkt aus. Rufe pro Antwort höchstens "
-    "eines dieser drei Werkzeuge auf.\n\n"
+    "eines dieser Werkzeuge auf.\n"
+    "- Wünscht Vincent eine Änderung am Crawler selbst (neues Portal, neue Funktion, Fehler), "
+    "kannst du keinen Code ändern - biete an, den Wunsch mit verbesserungswunsch_notieren auf die "
+    "Wunschliste zu setzen.\n"
+    "- Fragt er, ob er sich auf eine Ausschreibung bewerben soll, nutze bewerbung_bewerten.\n"
+    "- Fragen zu anstehenden Fristen/Terminen beantwortest du mit fristen_uebersicht, Fragen zum "
+    "Stand der Abgabeunterlagen mit checkliste_anzeigen.\n\n"
     "Vincents Prioritäten (versetze dich in seine Position, wenn du Treffer einordnest oder "
     "Vorschläge machst - ohne dass er das jedes Mal wiederholen muss):\n{prioritaeten}\n\n"
     "Heute ist {heute} - rechne relative Angaben wie \"in den nächsten 14 Tagen\" von diesem "
@@ -150,11 +158,68 @@ TOOLS = [
             "required": ["tender_id"],
         },
     },
+    {
+        "name": "bewerbung_bewerten",
+        "description": (
+            "Go/No-Go-Bewertung: Soll sich Vincent auf diese Ausschreibung bewerben? Vergleicht die "
+            "Ausschreibung (inkl. Vergabeunterlagen bzw. Verfahrensseite) mit seinem Firmenprofil und "
+            "liefert Empfehlung (bewerben/pruefen/nicht_bewerben), Passwert 0-100, "
+            "Ausschlusskriterien, Pflichtnachweise, Zuschlagskriterien, Fristen, fehlende Nachweise "
+            "und Risiken. tender_id muss aus einem vorherigen suche_ausschreibungen-Ergebnis "
+            "stammen. Eine bereits gespeicherte Bewertung wird wiederverwendet, außer neu=true."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"tender_id": {"type": "string"}, "neu": {"type": "boolean"}},
+            "required": ["tender_id"],
+        },
+    },
+    {
+        "name": "fristen_uebersicht",
+        "description": (
+            "Anstehende Angebots- und Fragenfristen der Ausschreibungen, an denen Vincent arbeitet "
+            "(gemerkt, bewertet oder mit Checkliste), sortiert nach Datum."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"tage": {"type": "integer", "description": "Zeitraum in Tagen ab heute, Standard 30"}},
+        },
+    },
+    {
+        "name": "checkliste_anzeigen",
+        "description": (
+            "Abgabe-Checkliste einer Ausschreibung: welche Nachweise/Punkte offen, vorhanden, erledigt "
+            "oder fehlend sind. tender_id aus einem vorherigen Suchergebnis."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"tender_id": {"type": "string"}},
+            "required": ["tender_id"],
+        },
+    },
 ]
 
 # Schreibende Werkzeuge - werden NIE direkt ausgeführt (siehe Moduldocstring), sondern lösen
 # einen Vorschlag aus, den Vincent im Frontend bestätigen oder ablehnen kann.
 WRITE_TOOLS = [
+    {
+        "name": "verbesserungswunsch_notieren",
+        "description": (
+            "Notiert einen Verbesserungswunsch an den Crawler selbst (neues Portal, neue Funktion, "
+            "Fehler, andere Darstellung) auf Kevins Wunschliste. Du änderst NIE selbst Code - "
+            "Vincent lässt die Wünsche später in Claude Code umsetzen. Formuliere die Beschreibung "
+            "daher als eigenständige, klare Aufgabe: was genau, warum, woran man erkennt, dass es "
+            "fertig ist."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "titel": {"type": "string", "description": "Kurzer Titel, z. B. 'Portal Vergabe NRW ergänzen'"},
+                "beschreibung": {"type": "string", "description": "Eigenständige Aufgabenbeschreibung"},
+            },
+            "required": ["titel", "beschreibung"],
+        },
+    },
     {
         "name": "aktualisieren_starten",
         "description": (
@@ -306,7 +371,11 @@ def _tool_suche_ausschreibungen(db: Session, tool_input: dict, gefundene: dict[s
     if unbekannte_kategorien:
         hinweise["ignorierte_unbekannte_kategorien"] = unbekannte_kategorien
     if total == 0 and any(tool_input.get(k) for k in ("q", "kategorien", "ki_relevanz_min", "frist_bis", "status", "portal_slugs")):
-        hinweise["hinweis"] = "Keine Treffer mit diesen Filtern - ggf. mit weniger Filtern erneut suchen."
+        hinweise["hinweis"] = (
+            "Keine Treffer. Behörden benutzen oft andere Worte: suche erneut mit verwandten Begriffen "
+            "bzw. Synonymen (z. B. statt 'KI': 'künstliche Intelligenz', 'Chatbot', 'Sprachmodell', "
+            "'maschinelles Lernen', 'Automatisierung') oder mit weniger Filtern."
+        )
     return {
         **hinweise,
         "gesamttreffer": total,
@@ -368,7 +437,61 @@ def _execute_tool(db: Session, name: str, tool_input: dict, gefundene: dict[str,
         return _tool_quellstatus(db)
     if name == "dokumente_lesen":
         return _tool_dokumente_lesen(db, tool_input)
+    if name == "bewerbung_bewerten":
+        return _tool_bewerbung_bewerten(db, tool_input, gefundene)
+    if name == "fristen_uebersicht":
+        return _tool_fristen(db, tool_input, gefundene)
+    if name == "checkliste_anzeigen":
+        return _tool_checkliste(db, tool_input, gefundene)
     return {"fehler": f"Unbekanntes Werkzeug: {name}"}
+
+
+def _tool_fristen(db: Session, tool_input: dict, gefundene: dict[str, Tender]) -> dict:
+    from app.bewerbung import fristen
+
+    try:
+        tage = max(1, min(int(tool_input.get("tage") or 30), 365))
+    except (TypeError, ValueError):
+        tage = 30
+    eintraege = fristen(db, tage)
+    for e in eintraege:
+        tender = db.get(Tender, e["tender_id"])
+        if tender is not None:
+            gefundene[tender.id] = tender
+    return {
+        "zeitraum_tage": tage,
+        "fristen": [
+            {"tender_id": e["tender_id"], "titel": e["titel"], "art": e["art"],
+             "datum": e["datum"].isoformat(), "grund": e["grund"]}
+            for e in eintraege
+        ],
+    }
+
+
+def _tool_checkliste(db: Session, tool_input: dict, gefundene: dict[str, Tender]) -> dict:
+    tender = db.get(Tender, tool_input.get("tender_id") or "")
+    if tender is None:
+        return {"fehler": "Unbekannte tender_id - erst mit suche_ausschreibungen suchen."}
+    gefundene[tender.id] = tender
+    punkte = tender.checkliste_json or []
+    if not punkte:
+        return {"titel": tender.titel, "hinweis": "Noch keine Checkliste - entsteht mit bewerbung_bewerten."}
+    return {"titel": tender.titel, "checkliste": [{"text": p["text"], "status": p["status"]} for p in punkte]}
+
+
+def _tool_bewerbung_bewerten(db: Session, tool_input: dict, gefundene: dict[str, Tender]) -> dict:
+    from app.agents.bewertung import bewerte
+
+    tender = db.get(Tender, tool_input.get("tender_id") or "")
+    if tender is None:
+        return {"fehler": "Unbekannte tender_id - erst mit suche_ausschreibungen suchen."}
+    gefundene[tender.id] = tender
+    if tender.bewertung_json and not tool_input.get("neu"):
+        return {"titel": tender.titel, "gespeicherte_bewertung": tender.bewertung_json}
+    bewertung = bewerte(db, tender)
+    if bewertung is None:
+        return {"fehler": "Bewertung nicht möglich - Sprachmodell hat nicht brauchbar geantwortet."}
+    return {"titel": tender.titel, "bewertung": bewertung}
 
 
 def _portal_von_slug(db: Session, slug: str) -> Portal | None:
@@ -385,6 +508,8 @@ def _beschreibe_aktion(db: Session, name: str, tool_input: dict) -> str:
         return f"Kevin möchte einen Aktualisieren-Lauf für „{ziel}“ starten."
     if name == "suchprofil_anlegen":
         return f"Kevin möchte das Suchprofil „{tool_input.get('name', '(ohne Namen)')}“ anlegen."
+    if name == "verbesserungswunsch_notieren":
+        return f"Kevin möchte auf die Wunschliste setzen: „{tool_input.get('titel', '(ohne Titel)')}“ – {tool_input.get('beschreibung', '')}"
     if name == "ausschreibung_merken":
         tender = db.get(Tender, tool_input.get("tender_id"))
         titel = tender.titel if tender else tool_input.get("tender_id", "(unbekannt)")
@@ -394,10 +519,7 @@ def _beschreibe_aktion(db: Session, name: str, tool_input: dict) -> str:
 
 def kevin_anbieter() -> str:
     """Welcher Sprachmodell-Anbieter tatsächlich genutzt wird: "anthropic" oder "ollama"."""
-    gewuenscht = (settings.kevin_anbieter or "auto").strip().lower()
-    if gewuenscht in ("anthropic", "ollama"):
-        return gewuenscht
-    return "anthropic" if settings.anthropic_api_key else "ollama"
+    return llm_anbieter()
 
 
 def run_assistant_chat(
@@ -483,6 +605,36 @@ _OLLAMA_TOOLS = [
     }
     for t in ALLE_TOOLS
 ]
+
+# Routing (26.09.2026, Muster "Routing" aus Anthropics "Building Effective Agents"): Die Frage wird
+# vorab grob eingeordnet, und ein lokales Modell sieht nur die dazu passenden Werkzeuge - kleine
+# Modelle greifen bei 11 Werkzeugen sonst häufiger daneben. Mehrere Absichten werden vereinigt;
+# ohne erkennbare Absicht gilt "suche". Claude bekommt weiterhin alle Werkzeuge.
+_ABSICHTEN: list[tuple[str, re.Pattern]] = [
+    ("bewertung", re.compile(r"bewerb|go.?no|lohnt|passt .*zu (uns|mir)|chance|sollt?en? (wir|ich)|checkliste|nachweis|eignung|referenz", re.I)),
+    ("fristen", re.compile(r"frist|deadline|bis wann|kalender|termin|diese woche|nächste woche|naechste woche|läuft .*ab", re.I)),
+    ("status", re.compile(r"portal|quelle|quellstatus|funktioniert|kaputt|aktualisier|crawl|durchlauf|lauf\b", re.I)),
+    ("wunsch", re.compile(r"wunsch|wünsch|feature|neue funktion|einbauen|verbesser|crawler soll|bug|fehler im crawler|kannst du .*(bauen|ändern|hinzufügen)", re.I)),
+]
+_WERKZEUGE_JE_ABSICHT = {
+    "suche": {"suche_ausschreibungen", "dokumente_lesen", "ausschreibung_merken", "suchprofil_anlegen", "bewerbung_bewerten"},
+    "bewertung": {"suche_ausschreibungen", "bewerbung_bewerten", "checkliste_anzeigen", "dokumente_lesen", "ausschreibung_merken"},
+    "fristen": {"fristen_uebersicht", "suche_ausschreibungen", "checkliste_anzeigen", "ausschreibung_merken"},
+    "status": {"quellstatus", "aktualisieren_starten"},
+    "wunsch": {"verbesserungswunsch_notieren"},
+}
+
+
+def absichten(nachricht: str) -> list[str]:
+    gefunden = [name for name, muster in _ABSICHTEN if muster.search(nachricht)]
+    return gefunden or ["suche"]
+
+
+def werkzeuge_fuer(nachricht: str) -> list[dict]:
+    erlaubt = set().union(*(_WERKZEUGE_JE_ABSICHT[a] for a in absichten(nachricht)))
+    if "suche" not in absichten(nachricht):
+        erlaubt.add("suche_ausschreibungen")  # Grundwerkzeug, fast jede Frage braucht es
+    return [t for t in _OLLAMA_TOOLS if t["function"]["name"] in erlaubt]
 _DENK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 # Zusätzliche Regeln nur für lokale Modelle: im Test (25.09.2026, qwen3:8b) beschrieb das Modell
@@ -495,7 +647,8 @@ _OLLAMA_ZUSATZREGELN = (
     "dem Gedächtnis.\n"
     "- Setze Filter nur, wenn die Frage sie verlangt: portal_slugs nur bei Frage nach einem "
     "bestimmten Portal, ki_relevanz_min nur bei ausdrücklicher Frage nach starker Relevanz.\n"
-    "- Findest du nichts, suche einmal mit weniger Filtern erneut, bevor du antwortest.\n"
+    "- Findest du nichts, suche erneut mit Synonymen/verwandten Begriffen oder weniger Filtern, "
+    "bevor du antwortest.\n"
     "- tender_id für ausschreibung_merken nur aus einem Suchergebnis dieses Gesprächs übernehmen."
 )
 _OHNE_WERKZEUG_NACHHAKEN = (
@@ -509,11 +662,11 @@ class _OllamaModellFehlt(Exception):
     pass
 
 
-def _ollama_anfrage(http: httpx.Client, messages: list[dict]) -> dict:
+def _ollama_anfrage(http: httpx.Client, messages: list[dict], werkzeuge: list[dict] | None = None) -> dict:
     nutzlast = {
         "model": settings.ollama_model,
         "messages": messages,
-        "tools": _OLLAMA_TOOLS,
+        "tools": werkzeuge if werkzeuge is not None else _OLLAMA_TOOLS,
         "stream": False,
         "options": {"temperature": 0.2},
         # Denk-Modus (z. B. Qwen3) aus: auf einem Mac sonst deutlich langsamer, für Werkzeugwahl +
@@ -559,6 +712,10 @@ def _vorschlag_fehler(db: Session, name: str, tool_input: dict) -> str | None:
         return "Unbekannter portal_slug - nur Slugs aus der Portal-Liste im Systemprompt verwenden, oder weglassen für alle."
     if name == "suchprofil_anlegen" and not str(tool_input.get("name") or "").strip():
         return "Das Suchprofil braucht einen Namen."
+    if name == "verbesserungswunsch_notieren" and not (
+        str(tool_input.get("titel") or "").strip() and str(tool_input.get("beschreibung") or "").strip()
+    ):
+        return "Titel und Beschreibung des Wunsches sind nötig."
     return None
 
 
@@ -578,8 +735,9 @@ def _run_ollama_chat(
     try:
         werkzeug_genutzt = False
         nachgehakt = False
+        werkzeuge = werkzeuge_fuer(nachricht)
         for _ in range(MAX_TOOL_ITERATIONEN):
-            antwort = _ollama_anfrage(http, messages)
+            antwort = _ollama_anfrage(http, messages, werkzeuge)
             tool_calls = antwort.get("tool_calls") or []
             text = _bereinige_text(antwort.get("content"))
             if not tool_calls and not werkzeug_genutzt and not nachgehakt:
@@ -649,7 +807,19 @@ def execute_assistant_action(db: Session, name: str, tool_input: dict) -> Assist
         return _aktion_suchprofil_anlegen(db, tool_input)
     if name == "ausschreibung_merken":
         return _aktion_ausschreibung_merken(db, tool_input)
+    if name == "verbesserungswunsch_notieren":
+        return _aktion_wunsch_notieren(db, tool_input)
     return AssistantActionResult(False, f"Unbekannte Aktion: {name}")
+
+
+def _aktion_wunsch_notieren(db: Session, tool_input: dict) -> AssistantActionResult:
+    titel = str(tool_input.get("titel") or "").strip()
+    beschreibung = str(tool_input.get("beschreibung") or "").strip()
+    if not titel or not beschreibung:
+        return AssistantActionResult(False, "Titel und Beschreibung sind nötig.")
+    db.add(Verbesserungswunsch(titel=titel, beschreibung=beschreibung))
+    db.commit()
+    return AssistantActionResult(True, f"Wunsch „{titel}“ auf die Wunschliste gesetzt.")
 
 
 def _aktion_aktualisieren_starten(db: Session, tool_input: dict) -> AssistantActionResult:

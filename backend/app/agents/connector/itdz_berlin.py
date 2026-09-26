@@ -91,6 +91,7 @@ class ItdzBerlinConnector(BaseConnector):
             felder={
                 "titel": candidate.titel_hint,
                 "vergabestelle": "IT-Dienstleistungszentrum Berlin (ITDZ Berlin)",
+                "ort_region": "Berlin",
                 "veroeffentlichungsdatum": candidate.listen_metadaten.get("veroeffentlichungsdatum"),
                 "volltext": None,
                 "dokumente_links": [],

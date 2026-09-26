@@ -145,6 +145,9 @@ class VergabekooperationBerlinConnector(BaseConnector):
                 "volltext": volltext,
                 "kurzbeschreibung": kurzbeschreibung,
                 "vergabestelle": meta.get("vergabestelle"),
+                # Plattform ausschließlich für Berliner Vergabestellen; die Seite nennt keinen Ort
+                # (Datenqualitäts-Check 26.09.2026: Ort bei 0 %).
+                "ort_region": "Berlin",
                 "verfahrensart": meta.get("verfahrensart"),
                 "veroeffentlichungsdatum": meta.get("veroeffentlichungsdatum"),
                 "angebotsfrist": meta.get("angebotsfrist"),

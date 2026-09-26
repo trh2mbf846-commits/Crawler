@@ -38,6 +38,15 @@ class Settings(BaseSettings):
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "qwen3:8b"
     ollama_timeout_seconds: float = 300.0
+    # Suche nach Bedeutung (app/semantik.py) - EXPERIMENTELL und standardmäßig aus: Messungen an
+    # echten Daten (26.09.2026, qwen3-embedding:0.6b und bge-m3) ergaben bei kurzen, allgemeinen
+    # Ausschreibungstiteln zu unzuverlässige Treffer. Kevin nutzt stattdessen Synonym-Suche.
+    semantik_aktiv: bool = False
+    ollama_embedding_model: str = "qwen3-embedding:0.6b"
+    # Absolute Ähnlichkeitswerte streuen je Anfrage stark (Messung 26.09.2026: relevante 0,22-0,62,
+    # irrelevante bis 0,62) - daher relative Auswahl: die ähnlichsten N, sofern nah am besten Treffer.
+    semantik_max_treffer: int = 10
+    semantik_relativ: float = 0.85  # Anteil der Ähnlichkeit des besten Treffers
 
     http_user_agent: str = "AusschreibungsCrawlerBot/0.1 (+Kontakt: siehe Portal-Konfiguration)"
     http_request_delay_seconds: float = 1.5  # Rate-Limiting, Kapitel 9.1
@@ -56,6 +65,22 @@ class Settings(BaseSettings):
     # periodische Scheduler an; im on-demand-Deployment (render.yaml) wird er per
     # CRAWLER_SCHEDULER_ENABLED=false abgeschaltet.
     scheduler_enabled: bool = True
+
+    # Inkrementelles Crawling: unveränderte, bekannte Ausschreibungen erst nach so vielen Tagen
+    # wieder im Detail abrufen (Sicherheitsnetz für Änderungen, die in der Liste nicht sichtbar sind).
+    detail_neupruefung_tage: int = 7
+    # Fehlende Angebotsfristen aus der Verfahrensseite ergänzen (agents/frist_ergaenzung.py):
+    # höchstens so viele Ausschreibungen pro Nachlauf (je ein höflicher Seitenabruf).
+    frist_ergaenzung_pro_lauf: int = 40
+
+    # Tägliche automatische Aktualisierung (Nutzeranfrage 25.09.2026), lokale Uhrzeit "HH:MM",
+    # leer = aus. Unabhängig von scheduler_enabled, siehe app/tagesaktualisierung.py.
+    auto_aktualisieren_uhrzeit: str = "07:00"
+
+    # Benachrichtigung bei neuen Treffern (Nutzeranfrage 25.09.2026), siehe app/benachrichtigung.py:
+    # Mac-Mitteilung (nur unter macOS wirksam) und - falls gesetzt - zusätzlich an
+    # CRAWLER_DIGEST_WEBHOOK_URL.
+    benachrichtigung_mac: bool = True
 
     # Proaktive Push-Benachrichtigung (Nutzeranfrage 25.09.2026, "was können gute Agenten noch"):
     # Kevins Kurzbericht (app/agents/digest.py) lädt bisher nur beim Öffnen des Tabs (Pull). Mit

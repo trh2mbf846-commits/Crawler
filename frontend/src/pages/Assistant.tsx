@@ -4,10 +4,13 @@ import {
   executeAssistantAction,
   fetchAssistantDigest,
   fetchAssistantPreferences,
+  fetchWuensche,
+  loescheWunsch,
   sendAssistantMessage,
+  setzeWunschStatus,
   updateAssistantPreferences,
 } from '../api/client'
-import type { AssistantPreferences } from '../api/types'
+import type { AssistantPreferences, Wunsch } from '../api/types'
 import { CATEGORIES } from '../api/types'
 import { TenderCard } from '../components/TenderCard'
 import {
@@ -29,6 +32,7 @@ const BEISPIELE = [
 
 const LEERE_PRAEFERENZEN: AssistantPreferences = {
   prioritaeten_text: null,
+  firmenprofil: null,
   bevorzugte_kategorien: [],
   bevorzugte_regionen: [],
   mindestwert: null,
@@ -110,6 +114,19 @@ function PraeferenzenPanel({ onClose }: { onClose: () => void }) {
             />
           </label>
 
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-ink-muted">
+              Firmenprofil (für „Bewerben oder nicht?“: Leistungen, Referenzen, Zertifikate, Größe)
+            </span>
+            <textarea
+              value={praeferenzen.firmenprofil ?? ''}
+              onChange={(e) => setPraeferenzen((prev) => ({ ...prev, firmenprofil: e.target.value }))}
+              rows={4}
+              placeholder="z. B. 8 Mitarbeitende, KI-Beratung und Entwicklung (LLM, Chatbots), 3 Referenzen öffentlicher Sektor, ISO 27001 in Vorbereitung, Jahresumsatz ca. 900.000 €"
+              className="focus-ring resize-y rounded-md border border-line bg-surface px-3 py-2 text-sm placeholder:text-ink-faint"
+            />
+          </label>
+
           <div>
             <span className="text-xs font-medium text-ink-muted">Bevorzugte Kategorien</span>
             <div className="mt-1 flex flex-wrap gap-1.5">
@@ -176,6 +193,105 @@ function PraeferenzenPanel({ onClose }: { onClose: () => void }) {
   )
 }
 
+function WunschlistePanel({ onClose }: { onClose: () => void }) {
+  const [wuensche, setWuensche] = useState<Wunsch[] | null>(null)
+  const [fehler, setFehler] = useState<string | null>(null)
+  const [kopiert, setKopiert] = useState(false)
+
+  const laden = useCallback(() => {
+    fetchWuensche()
+      .then(setWuensche)
+      .catch(() => setFehler('Wunschliste konnte nicht geladen werden.'))
+  }, [])
+  useEffect(laden, [laden])
+
+  const offene = (wuensche ?? []).filter((w) => w.status === 'offen')
+
+  const kopieren = async () => {
+    const text =
+      'Bitte setze im Repository trh2mbf846-commits/Crawler folgende Verbesserungswünsche um ' +
+      '(jeweils mit Tests, danach auf main pushen):\n\n' +
+      offene.map((w, i) => `${i + 1}. ${w.titel}\n${w.beschreibung}`).join('\n\n')
+    try {
+      await navigator.clipboard.writeText(text)
+      setKopiert(true)
+      setTimeout(() => setKopiert(false), 2500)
+    } catch {
+      setFehler('Kopieren nicht möglich – Text bitte manuell markieren.')
+    }
+  }
+
+  const status = async (w: Wunsch, neu: Wunsch['status']) => {
+    await setzeWunschStatus(w.id, neu).catch(() => setFehler('Status konnte nicht gespeichert werden.'))
+    laden()
+  }
+  const loeschen = async (w: Wunsch) => {
+    if (!window.confirm(`Wunsch „${w.titel}“ löschen?`)) return
+    await loescheWunsch(w.id).catch(() => setFehler('Löschen fehlgeschlagen.'))
+    laden()
+  }
+
+  return (
+    <div className="rounded-lg border border-line bg-surface p-4 shadow-card">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold text-ink">Kevins Wunschliste</h2>
+          <p className="mt-0.5 text-xs text-ink-muted">
+            Kevin ändert selbst keinen Code. Sag ihm, was am Crawler besser werden soll – er notiert es hier als Aufgabe.
+            Umsetzen: „Offene kopieren“ und in eine Claude-Code-Sitzung zum Repository „Crawler“ einfügen.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={kopieren}
+            disabled={offene.length === 0}
+            className="focus-ring rounded-md border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-50"
+          >
+            {kopiert ? '✓ Kopiert' : `Offene kopieren (${offene.length})`}
+          </button>
+          <button type="button" onClick={onClose} className="focus-ring rounded-md px-2 py-1.5 text-xs text-ink-muted hover:text-ink">
+            Schließen
+          </button>
+        </div>
+      </div>
+      {fehler ? <p className="mb-2 text-xs text-urgent-red">{fehler}</p> : null}
+      {wuensche === null ? (
+        <p className="text-sm text-ink-muted">Lade…</p>
+      ) : wuensche.length === 0 ? (
+        <p className="text-sm text-ink-muted">
+          Noch keine Wünsche. Beispiel an Kevin: „Merk dir als Wunsch: Die Übersicht soll auch nach Bundesland filtern können.“
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {wuensche.map((w) => (
+            <li key={w.id} className="rounded-md border border-line px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className={`text-sm font-medium ${w.status === 'erledigt' ? 'text-ink-faint line-through' : 'text-ink'}`}>
+                  {w.titel}
+                </span>
+                <div className="flex gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => status(w, w.status === 'offen' ? 'erledigt' : 'offen')}
+                    className="focus-ring text-brand hover:underline"
+                  >
+                    {w.status === 'offen' ? 'Erledigt' : 'Wieder öffnen'}
+                  </button>
+                  <button type="button" onClick={() => loeschen(w)} className="focus-ring text-ink-muted hover:text-urgent-red">
+                    Löschen
+                  </button>
+                </div>
+              </div>
+              <p className="mt-1 whitespace-pre-line text-xs text-ink-muted">{w.beschreibung}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 export function Assistant() {
   // Verlauf kommt aus dem Browser-Speicher (utils/kevinChat.ts) - bleibt beim Tab-Wechsel und
   // Neustart erhalten, bis er über "Chat löschen" bewusst geleert wird.
@@ -187,6 +303,7 @@ export function Assistant() {
   const [aktionStatus, setAktionStatus] = useState<Record<string, AktionStatus>>(() => ladeChat().aktionStatus)
   const [aktionLaeuft, setAktionLaeuft] = useState<string | null>(null)
   const [praeferenzenOffen, setPraeferenzenOffen] = useState(false)
+  const [wunschlisteOffen, setWunschlisteOffen] = useState(false)
   const endeRef = useRef<HTMLDivElement>(null)
   const aktiv = useRef(true)
 
@@ -336,6 +453,13 @@ export function Assistant() {
           </button>
           <button
             type="button"
+            onClick={() => setWunschlisteOffen((prev) => !prev)}
+            className="focus-ring rounded-md border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-muted hover:bg-surface-sunken hover:text-ink"
+          >
+            📝 Wunschliste
+          </button>
+          <button
+            type="button"
             onClick={() => setPraeferenzenOffen((prev) => !prev)}
             className="focus-ring rounded-md border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-muted hover:bg-surface-sunken hover:text-ink"
           >
@@ -345,6 +469,7 @@ export function Assistant() {
       </div>
 
       {praeferenzenOffen ? <PraeferenzenPanel onClose={() => setPraeferenzenOffen(false)} /> : null}
+      {wunschlisteOffen ? <WunschlistePanel onClose={() => setWunschlisteOffen(false)} /> : null}
 
       {nichtKonfiguriert ? (
         <div className="rounded-md border border-line bg-surface-sunken px-4 py-3 text-sm text-ink-muted">

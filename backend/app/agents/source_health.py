@@ -19,6 +19,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import datenqualitaet
 from app.config import settings
 from app.models import Escalation, Portal, SourceHealthMetric
 from app.prompts import QUELLSTATUS_SYSTEM, call_llm_json, quellstatus_user
@@ -38,8 +39,10 @@ def record_run(
     fehlerrate: float | None = None,
     fehlertyp: str | None = None,
     dauer_ms: int | None = None,
+    qualitaet: dict | None = None,
 ) -> SourceHealthMetric:
     metric = SourceHealthMetric(
+        qualitaet=qualitaet,
         portal_id=portal.id,
         erfolgreich=erfolgreich,
         treffer_anzahl=treffer_anzahl,
@@ -130,9 +133,26 @@ def evaluate(db: Session, portal: Portal) -> dict:
             ampel = "gelb" if ampel == "gruen" else ampel
             meldungen.append("Trefferrückgang über 50% ggü. gleitendem Durchschnitt - möglicherweise Strukturänderung.")
 
+    # Datenqualität (26.09.2026, app/datenqualitaet.py): Einbruch bei Frist/Vergabestelle/... ggü.
+    # den Vorläufen deutet auf eine Layout-Änderung des Portals hin, auch wenn der Lauf "erfolgreich" war.
+    if letzte[0].erfolgreich:
+        einbruch = datenqualitaet.einbrueche(
+            letzte[0].qualitaet, [m.qualitaet for m in letzte[1:] if m.erfolgreich]
+        )
+        if einbruch:
+            ampel = "gelb" if ampel == "gruen" else ampel
+            text = "; ".join(einbruch)
+            meldungen.append(f"Datenqualität: {text} - vermutlich Layout-Änderung.")
+            _eskaliere_falls_noetig(
+                db, portal, "sonstiges",
+                f"Portal '{portal.name}': Datenqualität eingebrochen ({text}).",
+                ["Portal-Struktur manuell prüfen", "Connector-Selektoren aktualisieren", "Als Wunsch an Kevin notieren"],
+            )
+
     return {
         "status_ampel": ampel,
         "letzter_erfolgreicher_lauf": letzter_erfolgreicher.lauf_am if letzter_erfolgreicher else None,
+        "qualitaet": letzte[0].qualitaet,
         "letzte_trefferzahl": letzte[0].treffer_anzahl,
         "fehlerrate_gleitend": letzte_fehlerrate,
         "meldung": " ".join(meldungen) or None,

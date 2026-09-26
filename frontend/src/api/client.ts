@@ -4,19 +4,25 @@ import type {
   AssistantDigest,
   AssistantMessage,
   AssistantPreferences,
+  Bewertung,
+  ChecklistenPunkt,
   Escalation,
   EscalationStatus,
+  Frist,
   HistoryEntry,
   PortalHealth,
+  Referenz,
+  ReferenzInput,
   RunAllStatus,
   SearchProfile,
   SearchProfileInput,
   Tender,
   TenderDetail,
   TenderQuery,
+  Wunsch,
 } from './types'
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000/api'
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000/api'
 // Nutzeranfrage 25.09.2026: Backend akzeptiert optional einen X-API-Key-Header (app/security.py).
 // Ohne CRAWLER_API_KEY auf dem Server ignoriert er diesen Header einfach - lokal ohne
 // VITE_API_KEY bleibt alles wie bisher.
@@ -99,6 +105,7 @@ export function fetchTenders(query: TenderQuery = {}): Promise<TendersResult> {
     frist_bis: query.frist_bis,
     status: query.status,
     sort: query.sort,
+    bedeutung: query.bedeutung ? 'true' : undefined,
     page: query.page,
     page_size: query.page_size,
   })
@@ -199,4 +206,55 @@ export function updateAssistantPreferences(preferences: AssistantPreferences): P
     method: 'PUT',
     body: JSON.stringify(preferences),
   })
+}
+
+export function bewerteTender(id: string): Promise<Bewertung> {
+  return request<Bewertung>(`/tenders/${encodeURIComponent(id)}/bewertung`, { method: 'POST' })
+}
+
+export function fetchWuensche(): Promise<Wunsch[]> {
+  return request<Wunsch[]>('/wuensche')
+}
+
+export function setzeWunschStatus(id: string, status: Wunsch['status']): Promise<Wunsch> {
+  return request<Wunsch>(`/wuensche/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  })
+}
+
+export function loescheWunsch(id: string): Promise<void> {
+  return request<void>(`/wuensche/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export function speichereCheckliste(tenderId: string, punkte: ChecklistenPunkt[]): Promise<ChecklistenPunkt[]> {
+  return request<ChecklistenPunkt[]>(`/tenders/${encodeURIComponent(tenderId)}/checkliste`, {
+    method: 'PUT',
+    body: JSON.stringify(punkte),
+  })
+}
+
+export function checklisteAusBewertung(tenderId: string): Promise<ChecklistenPunkt[]> {
+  return request<ChecklistenPunkt[]>(`/tenders/${encodeURIComponent(tenderId)}/checkliste/aus-bewertung`, { method: 'POST' })
+}
+
+export function fetchFristen(tage = 90): Promise<Frist[]> {
+  return request<Frist[]>(`/fristen?tage=${tage}`)
+}
+
+export const FRISTEN_ICS_URL = `${API_BASE_URL}/fristen.ics`
+
+export function fetchReferenzen(): Promise<Referenz[]> {
+  return request<Referenz[]>('/referenzen')
+}
+
+export function speichereReferenz(eingabe: ReferenzInput, id?: string): Promise<Referenz> {
+  return request<Referenz>(id ? `/referenzen/${encodeURIComponent(id)}` : '/referenzen', {
+    method: id ? 'PUT' : 'POST',
+    body: JSON.stringify(eingabe),
+  })
+}
+
+export function loescheReferenz(id: string): Promise<void> {
+  return request<void>(`/referenzen/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }

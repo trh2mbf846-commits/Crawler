@@ -11,7 +11,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app import queue
+from app import datenqualitaet, queue
 from app.agents import analysis, classification, discovery, duplicate, normalization, source_health
 from app.exceptions import AccessBlocked, TechnicalFailure
 from app.models import Job, Portal
@@ -105,6 +105,7 @@ def run_portal_cycle(db: Session, portal: Portal) -> dict:
             neu_anzahl=details.get("neu_oder_zu_pruefen", 0),
             fehlerrate=_fehlerrate_dieser_lauf(db, portal.id, start),
             dauer_ms=dauer_ms,
+            qualitaet=datenqualitaet.messe(db, portal, start),
         )
     elif job.status == "waiting_for_decision":
         source_health.record_run(db, portal, erfolgreich=False, fehlertyp="eskalation", dauer_ms=dauer_ms)

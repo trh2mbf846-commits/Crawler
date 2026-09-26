@@ -195,3 +195,50 @@ def test_ollama_zeitueberschreitung_liefert_verstaendlichen_hinweis(db):
     http = httpx.Client(base_url="http://ollama.test", transport=httpx.MockTransport(handler))
     ergebnis = run_assistant_chat(db, "Frage", ollama_http=http)
     assert ergebnis.antwort == _OLLAMA_ZU_LANGSAM_HINWEIS.format(modell=settings.ollama_model)
+
+
+# --- Routing und neue Werkzeuge (26.09.2026) -------------------------------------------------
+
+from app.agents.assistant import absichten, werkzeuge_fuer  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    ("frage", "absicht", "muss", "darf_nicht"),
+    [
+        ("Soll ich mich auf die GPU-Ausschreibung bewerben?", "bewertung", "bewerbung_bewerten", "quellstatus"),
+        ("Welche Fristen stehen diese Woche an?", "fristen", "fristen_uebersicht", "verbesserungswunsch_notieren"),
+        ("Funktioniert das Portal DTVP gerade?", "status", "quellstatus", "verbesserungswunsch_notieren"),
+        ("Merk dir als Wunsch: Filter nach Bundesland", "wunsch", "verbesserungswunsch_notieren", "quellstatus"),
+        ("Gibt es neue Ausschreibungen zu Chatbots?", "suche", "suche_ausschreibungen", "quellstatus"),
+    ],
+)
+def test_routing_gibt_dem_lokalen_modell_nur_passende_werkzeuge(frage, absicht, muss, darf_nicht):
+    assert absicht in absichten(frage)
+    namen = {t["function"]["name"] for t in werkzeuge_fuer(frage)}
+    assert muss in namen and darf_nicht not in namen and "suche_ausschreibungen" in namen
+
+
+def test_routing_wird_an_ollama_uebergeben(db):
+    anfragen: list[dict] = []
+    http = _mock_ollama([_tool_call("quellstatus", {}), {"role": "assistant", "content": "Alles grün."}], anfragen)
+    run_assistant_chat(db, "Funktioniert das Portal DTVP gerade?", ollama_http=http)
+    assert {t["function"]["name"] for t in anfragen[0]["tools"]} == {"quellstatus", "aktualisieren_starten", "suche_ausschreibungen"}
+
+
+def test_werkzeuge_fristen_und_checkliste(db, portal):
+    from datetime import datetime, timedelta
+
+    from app.agents.assistant import _execute_tool
+    from app.models import Tender
+
+    t = Tender(portal_id=portal.id, titel="KI-Plattform", dedupe_hash="k", gemerkt=True,
+               direktlink="https://x.invalid/CXABCDEFGH", angebotsfrist=datetime.utcnow() + timedelta(days=4),
+               checkliste_json=[{"id": "1", "text": "Referenzen", "art": "nachweis", "status": "fehlt"}])
+    db.add(t)
+    db.commit()
+    gefunden: dict = {}
+    fristen = _execute_tool(db, "fristen_uebersicht", {"tage": 7}, gefunden)
+    assert [f["titel"] for f in fristen["fristen"]] == ["KI-Plattform"] and t.id in gefunden
+    assert _execute_tool(db, "checkliste_anzeigen", {"tender_id": t.id}, {})["checkliste"] == [
+        {"text": "Referenzen", "status": "fehlt"}]
+    assert "fehler" in _execute_tool(db, "checkliste_anzeigen", {"tender_id": "gibtsnicht"}, {})

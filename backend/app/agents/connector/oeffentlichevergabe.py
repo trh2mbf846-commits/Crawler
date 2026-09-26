@@ -128,6 +128,12 @@ _VERFAHRENSARTEN = {
     "comp-tend": "Wettbewerbliches Verfahren",
     "oth-single": "Sonstiges einstufiges Verfahren",
     "oth-mult": "Sonstiges mehrstufiges Verfahren",
+    # Nationale (unterschwellige) Verfahrensarten nach UVgO/VOB/A in der deutschen eForms-Variante
+    "de-open": "Öffentliche Ausschreibung",
+    "de-restricted": "Beschränkte Ausschreibung",
+    "de-neg-w-call": "Verhandlungsvergabe mit Teilnahmewettbewerb",
+    "de-neg-wo-call": "Verhandlungsvergabe ohne Teilnahmewettbewerb",
+    "de-direct": "Direktauftrag",
 }
 
 

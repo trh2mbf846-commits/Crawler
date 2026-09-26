@@ -31,6 +31,13 @@ Verifiziert am 25.09.2026 gegen die echte Seite. Befund:
   Ausführungsort, Vergabeunterlagen-Downloadlinks). Der "Apply"-Link (Angebotsabgabe) verlangt
   ein Bieterkonto - das betrifft nur die Angebotsabgabe selbst, nicht das Einsehen der
   Bekanntmachung (Kapitel 10.3 trifft hier nicht zu).
+
+Erweiterung 25.09.2026 (Nutzeranfrage "mehr Bundesländer über die Bayern-Plattform"): Ohne den
+Bayern-Filter liefert dieselbe öffentliche Liste alle Bekanntmachungen sämtlicher Vergabestellen
+auf der RIB-Plattform bundesweit (live: 1174 statt 407, u. a. Berlin, Schleswig-Holstein,
+Niedersachsen, NRW, Mecklenburg-Vorpommern). Der Connector nutzt daher keinen Filter mehr; Slug
+bleibt "vergabe-bayern", damit bereits erfasste Bayern-Ausschreibungen dieselben Datensätze bleiben
+(gleiche RIB-IDs) statt doppelt aufzutauchen. Anzeigename entsprechend angepasst.
 """
 from __future__ import annotations
 
@@ -42,10 +49,11 @@ from bs4 import BeautifulSoup
 from app.agents.connector.base import BaseConnector, RawCandidate, RawDetail, detect_access_block
 from app.exceptions import TechnicalFailure
 
-BASE_URL = "https://www.meinauftrag.rib.de/public/publicationsFrame?filter=604283&config=exante/false"
+BASE_URL = "https://www.meinauftrag.rib.de/public/publicationsFrame?config=exante/false"
 NEXT_URL = "https://www.meinauftrag.rib.de/public/nextPublications"
 DETAIL_URL_TMPL = "https://www.meinauftrag.rib.de/public/publications/{externe_id}"
-_FILTER_ID = "604283"
+# Leer = alle Vergabestellen der RIB-Plattform (bundesweit); "604283" wäre nur Bayern.
+_FILTER_ID = ""
 # RIB liefert pro Nachlade-Aufruf 20 Treffer (live verifiziert 25.09.2026); dient hier nur als
 # Sicherheitsnetz, falls `totalEntries` sich nicht aus der Startseite auslesen lässt.
 _SEITENGROESSE = 20
@@ -55,12 +63,12 @@ _GESAMT_MUSTER = re.compile(r"totalEntries\s*=\s*(\d+)")
 
 class VergabeBayernConnector(BaseConnector):
     slug = "vergabe-bayern"
-    name = "Vergabeplattform Bayern (vergabe.bayern.de)"
+    name = "RIB/iTWO-Vergabeplattform (Bayern + weitere Bundesländer)"
     base_url = BASE_URL
     vorgegeben = False
     robots_status = "geprueft_ok"
-    # ~402 Treffer / 20 pro Seite (Stichprobe 25.09.2026) + Puffer für Wachstum.
-    max_pages = 30
+    # ~1174 Treffer bundesweit / 20 pro Seite (Stichprobe 25.09.2026) + Puffer für Wachstum.
+    max_pages = 80
     tos_hinweis = (
         "robots.txt der zugrunde liegenden RIB-Plattform meinauftrag.rib.de erlaubt automatisierten "
         "Zugriff vollständig (\"Allow: /\"); vergabe.bayern.de selbst hat kein robots.txt. Liste und "

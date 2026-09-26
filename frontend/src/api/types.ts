@@ -41,6 +41,7 @@ export interface Tender {
   portal: { id: string; name: string }
   veroeffentlichungsdatum: string | null
   angebotsfrist: string | null
+  frist_quelle?: 'seite' | 'ki' | null
   fragenfrist: string | null
   verfahrensart: string | null
   cpv_codes: string[]
@@ -59,7 +60,66 @@ export interface Tender {
   zuletzt_geprueft_am: string
 }
 
+export interface Bewertung {
+  empfehlung: 'bewerben' | 'pruefen' | 'nicht_bewerben'
+  passwert: number
+  zusammenfassung: string
+  begruendung: string
+  ausschlusskriterien: string[]
+  pflichtnachweise: string[]
+  zuschlagskriterien: string[]
+  fristen: string[]
+  fehlende_nachweise: string[]
+  risiken: string[]
+  naechste_schritte: string[]
+  passende_referenzen: string[]
+  entfernt_ohne_beleg: number
+  quellen: string[]
+  modell: string
+  firmenprofil_fehlte: boolean
+  bewertet_am: string | null
+}
+
+export interface ChecklistenPunkt {
+  id: string
+  text: string
+  art: 'nachweis' | 'ausschluss' | 'frist' | 'eigen'
+  status: 'offen' | 'vorhanden' | 'fehlt' | 'erledigt'
+}
+
+export interface Frist {
+  tender_id: string
+  titel: string
+  vergabestelle: string | null
+  art: 'Angebotsfrist' | 'Fragenfrist'
+  datum: string
+  grund: string
+  direktlink: string
+}
+
+export interface Referenz {
+  id: string
+  titel: string
+  auftraggeber: string | null
+  jahr: number | null
+  volumen: number | null
+  beschreibung: string | null
+  erstellt_am: string
+}
+
+export type ReferenzInput = Omit<Referenz, 'id' | 'erstellt_am'>
+
+export interface Wunsch {
+  id: string
+  titel: string
+  beschreibung: string
+  status: 'offen' | 'erledigt'
+  erstellt_am: string
+}
+
 export interface TenderDetail extends Tender {
+  bewertung?: Bewertung | null
+  checkliste: ChecklistenPunkt[]
   volltext: string | null
   dokumente: { titel: string | null; url: string }[]
   ranking_aufschluesselung: {
@@ -90,6 +150,7 @@ export interface PortalHealth {
   letzte_trefferzahl: number | null
   fehlerrate_gleitend: number | null
   meldung: string | null
+  qualitaet?: { anzahl: number; quoten: Record<string, number> } | null
 }
 
 export interface RunAllPortalResult {
@@ -106,6 +167,7 @@ export interface RunAllStatus {
   beendet_am: string | null
   aktuelle_portale: string[]
   ergebnisse: RunAllPortalResult[]
+  automatisch_um?: string | null
 }
 
 export interface SearchProfile {
@@ -166,6 +228,7 @@ export interface AssistantActionResult {
 
 export interface AssistantPreferences {
   prioritaeten_text: string | null
+  firmenprofil?: string | null
   bevorzugte_kategorien: string[]
   bevorzugte_regionen: string[]
   mindestwert: number | null
@@ -186,6 +249,7 @@ export interface TenderQuery {
   ki_relevanz_min?: 'stark' | 'moeglich'
   frist_bis?: string
   status?: TenderStatus | 'alle'
+  bedeutung?: boolean
   sort?: TenderSort
   page?: number
   page_size?: number

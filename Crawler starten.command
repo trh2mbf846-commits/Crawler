@@ -156,6 +156,14 @@ if ! grep -Eq '^[[:space:]]*CRAWLER_ANTHROPIC_API_KEY=.+' .env; then
         schritt "Sprachmodell $MODELL für Crawler Kevin herunterladen (einmalig, einige GB)"
         "$OLLAMA" pull "$MODELL" || printf '\033[33mHinweis: Download fehlgeschlagen - wird beim nächsten Start erneut versucht.\033[0m\n'
       fi
+      # Zusatzmodell nur für die experimentelle Suche nach Bedeutung (CRAWLER_SEMANTIK_AKTIV=true).
+      EMBEDDING="$(sed -n 's/^[[:space:]]*CRAWLER_OLLAMA_EMBEDDING_MODEL=//p' .env | tail -1)"
+      EMBEDDING="${EMBEDDING:-qwen3-embedding:0.6b}"
+      if grep -Eiq '^[[:space:]]*CRAWLER_SEMANTIK_AKTIV=(true|1)' .env \
+         && ! "$OLLAMA" list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qx "$EMBEDDING"; then
+        schritt "Zusatzmodell $EMBEDDING für die Suche nach Bedeutung herunterladen (einmalig)"
+        "$OLLAMA" pull "$EMBEDDING" || printf '\033[33mHinweis: Download fehlgeschlagen - Suche nach Bedeutung bleibt bis zum nächsten Start aus.\033[0m\n'
+      fi
       # Modell schon jetzt im Hintergrund in den Speicher laden (dauert beim ersten Mal etwas),
       # damit Kevins erste Antwort nicht zusätzlich darauf warten muss.
       (curl -fs http://localhost:11434/api/generate -d "{\"model\": \"$MODELL\", \"keep_alive\": \"60m\"}" >/dev/null 2>&1 &)

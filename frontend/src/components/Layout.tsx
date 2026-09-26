@@ -4,7 +4,9 @@ import { NavLink } from 'react-router-dom'
 const navItems = [
   { to: '/', label: 'Übersicht', end: true },
   { to: '/assistant', label: 'Crawler Kevin', end: false },
+  { to: '/fristen', label: 'Fristen', end: false },
   { to: '/profiles', label: 'Suchprofile', end: false },
+  { to: '/profil', label: 'Mein Profil', end: false },
   { to: '/portals', label: 'Quellstatus', end: false },
   { to: '/escalations', label: 'Posteingang', end: false },
 ]

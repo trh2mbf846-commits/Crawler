@@ -43,6 +43,84 @@ Suche, Detailansicht, Suchprofile, Quellstatus-Dashboard mit Quellen-Übersicht,
 Entscheidungs-Posteingang, Crawler-Kevin-Tab). 82 automatisierte Tests plus reale Testläufe
 gegen 7 Live-Portale mit 7306 echten Ausschreibungen.
 
+### Robuster Crawler, Bewerbungsalltag, fähigerer Kevin (Update 26.09.2026)
+
+Nach einer zweiten Recherche zu professionellen Crawlern/Agenten (Anthropic "Building Effective
+Agents", Scraping-Praxisberichte, Vergabe-KI-Anbieter):
+
+**Crawler robuster**
+- **Inkrementell** (`agents/discovery.py`, Tabelle `kandidaten_stand`): je Kandidat ein
+  Fingerabdruck der Listendaten; bekannte, unveränderte Ausschreibungen werden nicht erneut im
+  Detail abgerufen (spätestens nach `CRAWLER_DETAIL_NEUPRUEFUNG_TAGE`, Default 7). Anlass: ein
+  kompletter RIB-Lauf (1176 Detailseiten) dauerte in der Testumgebung über 50 Minuten.
+- **Datenqualität pro Lauf** (`app/datenqualitaet.py`): Anteil mit Frist/Vergabestelle/
+  Beschreibung/Ort/Verfahrenslink; bricht ein Anteil um ≥ 30 Prozentpunkte ein, wird das Portal gelb
+  und es entsteht ein Posteingang-Eintrag ("vermutlich Layout-Änderung"). Anzeige im Quellstatus.
+- **Fehlende Fristen ergänzen** (`agents/frist_ergaenzung.py`): Suchmuster auf der Verfahrensseite,
+  nur als Notlösung das Sprachmodell - übernommen nur mit wörtlich im Text gefundenem Beleg.
+  Herkunft wird angezeigt ("aus Verfahrensseite ermittelt").
+
+**Bewerbungsalltag** (`app/bewerbung.py`, `api/bewerbung.py`)
+- **Abgabe-Checkliste** je Ausschreibung (Detailseite): entsteht automatisch aus der
+  Go/No-Go-Bewertung (Pflichtnachweise, fehlende Nachweise als "fehlt", Ausschlusskriterien,
+  Fristen), abhakbar, eigene Punkte ergänzbar; neue Bewertungen ergänzen, ohne Häkchen zu verlieren.
+- **Fristen-Seite** mit allen Angebots-/Fragenfristen der gemerkten, bewerteten oder mit Checkliste
+  versehenen Ausschreibungen, plus **.ics-Export** für den Mac-Kalender (Erinnerung 3 Tage vorher).
+- **Mein Profil**: Firmenprofil + **Referenzprojekte**; die Bewertung schlägt passende Referenzen vor.
+
+**Kevin**
+- **Prüfer-Schritt** in der Go/No-Go-Bewertung: Kriterien/Nachweise/Fristen, die sich im Quelltext
+  nicht wiederfinden, werden verworfen (Anzahl wird angezeigt); Referenzvorschläge nur aus echten
+  Referenzen.
+- **Routing**: Die Frage wird vorab eingeordnet (Suche, Bewertung, Fristen, Status, Wunsch); das
+  lokale Modell sieht nur die passenden Werkzeuge.
+- **Neue Werkzeuge**: `fristen_uebersicht`, `checkliste_anzeigen`.
+- **Kevin-Prüfsatz**: `.venv/bin/python -m app.kevin_pruefsatz` im Ordner `backend` stellt Kevin
+  typische Fragen und misst, ob er das richtige Werkzeug wählt - zum Vergleichen von Änderungen
+  und Modellen.
+- **Suche nach Bedeutung jetzt experimentell und standardmäßig aus**: Messungen am kompletten
+  Bestand (1547 Ausschreibungen, Modelle qwen3-embedding:0.6b und bge-m3) ergaben bei eindeutigen
+  Begriffen gute Treffer, bei "KI"/"Sprachmodell"/"Chatbot" aber überwiegend Fehltreffer (kurze,
+  allgemeine Titel wie "Maschinentechnik"). Einschalten mit `CRAWLER_SEMANTIK_AKTIV=true`.
+  Kevin sucht stattdessen bei 0 Treffern erneut mit Synonymen/verwandten Begriffen - das ergibt
+  echte Stichwort-Treffer.
+
+### Ausbau nach Profi-Recherche (Update 25.09.2026)
+
+Nutzeranfragen nach einer Recherche, was professionelle Ausschreibungsplattformen bieten
+(Alerts, Go/No-Go-Bewertung, Suche nach Bedeutung), plus "mehr Bundesländer", "täglich
+automatisch" und "bessere KI-Einordnung". Alles läuft lokal und kostenlos über Ollama (oder über
+Claude, falls ein API-Key gesetzt ist).
+
+- **RIB/iTWO bundesweit** (`agents/connector/vergabe_bayern.py`): ohne Bayern-Filter liefert die
+  öffentliche Liste alle Vergabestellen der Plattform (live: 1176 statt 407, u. a. Berlin,
+  Schleswig-Holstein, Niedersachsen, NRW, MV). Slug bleibt `vergabe-bayern` (keine Dubletten).
+- **Täglich automatisch aktualisieren** (`app/tagesaktualisierung.py`): `CRAWLER_AUTO_AKTUALISIEREN_UHRZEIT`
+  (Default `07:00`, lokale Zeit, leer = aus); ein verpasster Lauf wird beim nächsten Start nachgeholt.
+  Der Aktualisieren-Button zeigt automatisch gestartete Läufe und die Uhrzeit an.
+- **KI-Nachprüfung** (`agents/ki_nachpruefung.py`): nach jedem Lauf prüft das Sprachmodell alle
+  als "stark"/"möglich" markierten Ausschreibungen mit strengeren Regeln nach (KI muss Kern des
+  Auftrags sein, nicht nur erwähnt oder Teil eines Namens). Real getestet (qwen3:8b, 32 Kandidaten):
+  28 korrekt herabgestuft (SAP-Umstellung, CMS-Webseite, Datenschutzbeauftragter, "AI-THENA" =
+  Fähranleger …), echte KI-Aufträge blieben "stark", "Deep Learning GPU Cluster" wurde hochgestuft.
+- **Benachrichtigung** (`app/benachrichtigung.py`): neue Treffer zu Suchprofilen (ohne Suchprofil:
+  neue stark KI-relevante Ausschreibungen) als Mac-Mitteilung und optional an
+  `CRAWLER_DIGEST_WEBHOOK_URL`; jeder Treffer nur einmal, nach der KI-Nachprüfung.
+- **Bewerben oder nicht? (Go/No-Go)** (`agents/bewertung.py`, `POST /api/tenders/{id}/bewertung`,
+  Kevin-Werkzeug `bewerbung_bewerten`): vergleicht Ausschreibung inkl. Vergabeunterlagen bzw.
+  Verfahrensseite mit dem **Firmenprofil** (neu in Kevins Präferenzen) und liefert Empfehlung,
+  Passwert 0-100, Ausschlusskriterien, Pflichtnachweise, Zuschlagskriterien, Fristen, fehlende
+  Nachweise, Risiken und nächste Schritte; auf der Detailseite als "Bewerben oder nicht?".
+- **Kevins Wunschliste** (`api/wuensche.py`, Kevin-Werkzeug `verbesserungswunsch_notieren`): Kevin
+  ändert bewusst keinen Code (lokales Modell dafür nicht zuverlässig genug, Selbstumbau zu
+  riskant), sondern formuliert Verbesserungswünsche als Aufgaben; "Offene kopieren" erzeugt einen
+  Text zum Einfügen in eine Claude-Code-Sitzung.
+- **Suche nach Bedeutung** (`app/semantik.py`): Embedding-Modell über Ollama - inzwischen
+  experimentell und standardmäßig aus, siehe Update 26.09.2026.
+- Nebenbei behoben: Sortierung "KI-Relevanz" in der Übersicht führte zu HTTP 422 (Backend kannte sie nicht).
+- Nachlauf-Reihenfolge nach jedem Lauf (`app/nachlauf.py`): KI-Nachprüfung → Vektoren für neue
+  Ausschreibungen → Benachrichtigung.
+
 ### Nur bewerbbare Ausschreibungen mit Direktlink zum Verfahren (Update 25.09.2026)
 
 Nutzerrückmeldung: "viele falsch oder direkt Dokumente zum Download - es sollen professionelle

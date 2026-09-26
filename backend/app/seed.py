@@ -81,20 +81,27 @@ def run_seed(db: Session) -> None:
             db.add(Portal(**daten))
 
     for zusatz in ZUSATZPORTALE:
-        if db.scalars(select(Portal).where(Portal.slug == zusatz["slug"])).first() is None:
-            db.add(
-                Portal(
-                    slug=zusatz["slug"],
-                    name=zusatz["name"],
-                    base_url=zusatz["base_url"],
-                    betreiber=zusatz["betreiber"],
-                    robots_status=zusatz["robots_status"],
-                    tos_hinweis=zusatz["hinweis"],
-                    intervall_minuten=zusatz["intervall_minuten"],
-                    vorgegeben=False,
-                    aktiv=zusatz["slug"] in AKTIVE_ZUSATZ_SLUGS,
-                )
+        vorhanden = db.scalars(select(Portal).where(Portal.slug == zusatz["slug"])).first()
+        if vorhanden is not None:
+            # Beschreibende Angaben aktuell halten (z. B. Umbenennung bei erweitertem Umfang),
+            # ohne die vom Nutzer gesetzte Aktivierung anzutasten.
+            vorhanden.name = zusatz["name"]
+            vorhanden.betreiber = zusatz["betreiber"]
+            vorhanden.tos_hinweis = zusatz["hinweis"]
+            continue
+        db.add(
+            Portal(
+                slug=zusatz["slug"],
+                name=zusatz["name"],
+                base_url=zusatz["base_url"],
+                betreiber=zusatz["betreiber"],
+                robots_status=zusatz["robots_status"],
+                tos_hinweis=zusatz["hinweis"],
+                intervall_minuten=zusatz["intervall_minuten"],
+                vorgegeben=False,
+                aktiv=zusatz["slug"] in AKTIVE_ZUSATZ_SLUGS,
             )
+        )
 
     db.commit()
 

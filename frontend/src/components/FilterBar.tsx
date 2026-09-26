@@ -9,6 +9,7 @@ export interface TenderFilters {
   frist_bis: string
   status: '' | 'alle' | TenderStatus
   sort: TenderSort
+  bedeutung: boolean
 }
 
 interface FilterBarProps {
@@ -54,6 +55,13 @@ export function FilterBar({ filters, onChange, portals, categories }: FilterBarP
             placeholder="Suche nach Titel, Vergabestelle, Beschreibung…"
             className="focus-ring w-full rounded-md border border-line bg-surface px-3 py-2 text-sm placeholder:text-ink-faint"
           />
+          <label
+            className="mt-1.5 flex cursor-pointer items-center gap-1.5 text-xs text-ink-muted"
+            title="Findet auch Ausschreibungen mit anderen Worten für dasselbe, z. B. „Sprachmodell“ oder „Assistenzsystem“ bei der Suche nach KI"
+          >
+            <input type="checkbox" checked={filters.bedeutung} onChange={(event) => set('bedeutung', event.target.checked)} />
+            Ähnliche ergänzen (experimentell, nur mit CRAWLER_SEMANTIK_AKTIV)
+          </label>
         </div>
         <select
           value={filters.sort}

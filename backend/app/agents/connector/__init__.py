@@ -140,18 +140,19 @@ ZUSATZPORTALE: list[dict] = [
         intervall_minuten=720,
         hinweis=(
             "Geprüft 05.09.2026: offizielle OpenData-REST-API (kein Scraping, kein Login), liefert "
-            "täglich alle Bekanntmachungen aus Bund/Ländern/Kommunen als CSV. Deckt teilweise auch "
-            "Vergabestellen ab, die intern Brandenburg/Deutsche eVergabe nutzen. Einschränkungen: kein "
-            "Angebotsfrist-Feld in dieser CSV-Variante, mögliche Überschneidung mit TED/DTVP (mit "
-            "Vincent 05.09.2026 abgestimmt, bewusst in Kauf genommen). Connector implementiert."
+            "täglich alle Bekanntmachungen aus Bund/Ländern/Kommunen (seit 25.09.2026 im vollständigen "
+            "eForms-Format: nur offene Ausschreibungen, Direktlink zur Verfahrensseite, Angebotsfrist). "
+            "Deckt auch Vergabestellen ab, die intern Brandenburg/Deutsche eVergabe nutzen; "
+            "Überschneidungen mit TED/DTVP erkennt die portalübergreifende Duplikaterkennung. "
+            "Connector implementiert."
         ),
     ),
     dict(
         slug="vergabe-bayern",
         robots_status="geprueft_ok",
-        name="Vergabeplattform Bayern (vergabe.bayern.de)",
+        name="RIB/iTWO-Vergabeplattform (Bayern + weitere Bundesländer)",
         base_url="https://www.vergabe.bayern.de/veroeffentlichungen/auftragsbekanntmachungen/index.html",
-        betreiber="Bayerisches Staatsministerium für Wohnen, Bau und Verkehr (RIB/iTWO-Plattform)",
+        betreiber="RIB Software (iTWO tender) - Vergabestellen aus Bayern (vergabe.bayern.de) und weiteren Ländern",
         intervall_minuten=360,
         hinweis=(
             "Geprüft 25.09.2026 (Nutzeranfrage \"können wir mehr Portale dazu fügen?\"): "
@@ -159,7 +160,8 @@ ZUSATZPORTALE: list[dict] = [
             "(meinauftrag.rib.de) ein - derselben Software-Familie, auf die ITDZ Berlin nur extern "
             "verlinkt. robots.txt dort erlaubt automatisierten Zugriff vollständig (\"Allow: /\"), "
             "Liste und Detailseiten sind ohne Login öffentlich (nur die Angebotsabgabe selbst "
-            "verlangt ein Bieterkonto). Connector implementiert."
+            "verlangt ein Bieterkonto). Connector implementiert. Seit 25.09.2026 ohne Bayern-Filter: "
+            "alle Vergabestellen der RIB-Plattform bundesweit (ca. 1170 statt 400 Bekanntmachungen)."
         ),
     ),
     dict(

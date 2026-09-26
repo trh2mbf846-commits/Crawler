@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Category, Portal, RankingScore, Tender, TenderCategory
@@ -27,7 +27,11 @@ def search_tenders(
     sort: str = "ranking",
     page: int = 1,
     page_size: int = 20,
+    bedeutung: bool = False,
 ) -> tuple[list[Tender], int]:
+    """bedeutung=True (mit q): zusätzlich zur Stichwortsuche auch Ausschreibungen mit ähnlicher
+    Bedeutung finden (app/semantik.py), sortiert nach Ähnlichkeit. Ist die Bedeutungssuche nicht
+    verfügbar (kein Ollama/Modell), bleibt es bei der normalen Stichwortsuche."""
     query = select(Tender)
 
     if portal:
@@ -60,17 +64,35 @@ def search_tenders(
     elif status != "alle":
         query = query.where(Tender.status == status)
 
+    aehnlich: dict[str, float] | None = None
+    if q and bedeutung:
+        from app.semantik import aehnlichkeiten
+
+        aehnlich = aehnlichkeiten(db, q)
+
     if q:
         like = f"%{q.lower()}%"
-        query = query.where(
-            or_(
-                func.lower(Tender.titel).like(like),
-                func.lower(Tender.kurzbeschreibung).like(like),
-                func.lower(Tender.vergabestelle).like(like),
-            )
+        stichwort = or_(
+            func.lower(Tender.titel).like(like),
+            func.lower(Tender.kurzbeschreibung).like(like),
+            func.lower(Tender.vergabestelle).like(like),
         )
+        query = query.where(or_(stichwort, Tender.id.in_(list(aehnlich))) if aehnlich else stichwort)
 
     query = query.distinct()
+
+    if aehnlich is not None:
+        # Stichwort-Treffer zuerst (sie enthalten den Suchbegriff wirklich), danach die ähnlichen
+        # Ergänzungen, jeweils nach Bedeutungs-Ähnlichkeit.
+        alle = list(db.scalars(query).unique().all())
+        begriff = q.lower()
+
+        def enthaelt(t: Tender) -> bool:
+            return any(begriff in (feld or "").lower() for feld in (t.titel, t.kurzbeschreibung, t.vergabestelle))
+
+        alle.sort(key=lambda t: (enthaelt(t), aehnlich.get(t.id, 0.0)), reverse=True)
+        start = (page - 1) * page_size
+        return alle[start:start + page_size], len(alle)
 
     total = len(db.scalars(query).unique().all())
 
@@ -78,6 +100,12 @@ def search_tenders(
         query = query.order_by(Tender.angebotsfrist.is_(None), Tender.angebotsfrist.asc())
     elif sort == "veroeffentlichung":
         query = query.order_by(Tender.veroeffentlichungsdatum.desc())
+    elif sort == "ki_relevanz":
+        # Die Oberfläche bot diese Sortierung an, das Backend kannte sie nicht (HTTP 422) - behoben 25.09.2026.
+        rang = case({"stark": 2, "moeglich": 1}, value=Tender.ki_relevanz_score, else_=0)
+        query = query.outerjoin(RankingScore, RankingScore.tender_id == Tender.id).order_by(
+            rang.desc(), RankingScore.gesamtscore.desc().nulls_last()
+        )
     else:
         query = query.outerjoin(RankingScore, RankingScore.tender_id == Tender.id).order_by(
             RankingScore.gesamtscore.desc().nulls_last()

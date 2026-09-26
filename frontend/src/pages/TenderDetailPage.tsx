@@ -2,6 +2,8 @@ import { useCallback } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { fetchTender, fetchTenderHistory } from '../api/client'
 import { KiBadge, PortalBadge, StatusBadge, UrgencyBadge } from '../components/Badges'
+import { BewertungPanel } from '../components/BewertungPanel'
+import { ChecklistePanel } from '../components/ChecklistePanel'
 import { RankingBars } from '../components/RankingBars'
 import { ErrorView, LoadingView } from '../components/StateViews'
 import { Timeline } from '../components/Timeline'
@@ -98,11 +100,29 @@ export function TenderDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">
+          <BewertungPanel tenderId={tender.id} anfangs={tender.bewertung} onBewertet={reload} />
+          <ChecklistePanel
+            key={`${tender.id}-${tender.bewertung?.bewertet_am ?? ''}`}
+            tenderId={tender.id}
+            anfangs={tender.checkliste}
+            hatBewertung={Boolean(tender.bewertung)}
+          />
+
           <section className="rounded-lg border border-line bg-surface p-6 shadow-card">
             <h2 className="mb-4 text-sm font-semibold text-ink">Details</h2>
             <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <Field label="Veröffentlicht" value={formatDate(tender.veroeffentlichungsdatum)} />
-              <Field label="Angebotsfrist" value={formatDateTime(tender.angebotsfrist)} />
+              <Field
+                label="Angebotsfrist"
+                value={
+                  formatDateTime(tender.angebotsfrist) +
+                  (tender.frist_quelle === 'seite'
+                    ? ' (aus Verfahrensseite ermittelt)'
+                    : tender.frist_quelle === 'ki'
+                      ? ' (von Kevin aus Verfahrensseite gelesen – bitte prüfen)'
+                      : '')
+                }
+              />
               <Field label="Fragenfrist" value={formatDateTime(tender.fragenfrist)} />
               <Field label="Verfahrensart" value={tender.verfahrensart ?? '–'} />
               <Field label="Geschätzter Wert" value={formatCurrency(tender.geschaetzter_wert)} />

@@ -19,6 +19,7 @@ const defaultFilters: TenderFilters = {
   frist_bis: '',
   status: '',
   sort: 'ranking',
+  bedeutung: false,
 }
 
 function isDefaultFilters(filters: TenderFilters): boolean {
@@ -56,10 +57,11 @@ export function Overview() {
         frist_bis: filters.frist_bis || undefined,
         status: filters.status || undefined,
         sort: filters.sort,
+        bedeutung: filters.bedeutung,
         page,
         page_size: PAGE_SIZE,
       }),
-    [debouncedQuery, filters.portal, filters.kategorie, filters.ki_relevanz_min, filters.frist_bis, filters.status, filters.sort, page],
+    [debouncedQuery, filters.portal, filters.kategorie, filters.ki_relevanz_min, filters.frist_bis, filters.status, filters.sort, filters.bedeutung, page],
   )
 
   const { data, loading, error, reload } = useAsync(tendersFetcher, [tendersFetcher])

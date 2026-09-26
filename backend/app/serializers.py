@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from app.agents import ranking, source_health
 from app.models import Portal, Tender
 from app.schemas import (
+    BewertungOut,
+    ChecklistenPunkt,
     DokumentOut,
     PortalHealthOut,
     PortalRef,
@@ -25,6 +27,7 @@ def tender_to_out(tender: Tender) -> TenderOut:
         portal=PortalRef(id=tender.portal_id, name=tender.portal.name),
         veroeffentlichungsdatum=tender.veroeffentlichungsdatum,
         angebotsfrist=tender.angebotsfrist,
+        frist_quelle=tender.frist_quelle,
         fragenfrist=tender.fragenfrist,
         verfahrensart=tender.verfahrensart,
         cpv_codes=tender.cpv_codes or [],
@@ -60,7 +63,18 @@ def tender_to_detail_out(tender: Tender) -> TenderDetailOut:
         volltext=tender.volltext,
         dokumente=[DokumentOut(titel=d.titel, url=d.url) for d in tender.dokumente],
         ranking_aufschluesselung=breakdown,
+        bewertung=bewertung_to_out(tender),
+        checkliste=[ChecklistenPunkt(**p) for p in (tender.checkliste_json or [])],
     )
+
+
+def bewertung_to_out(tender: Tender) -> BewertungOut | None:
+    if not tender.bewertung_json:
+        return None
+    try:
+        return BewertungOut(**tender.bewertung_json, bewertet_am=tender.bewertet_am)
+    except Exception:  # älteres/defektes Format - lieber neu bewerten lassen als abstürzen
+        return None
 
 
 def portal_to_health_out(db: Session, portal: Portal) -> PortalHealthOut:

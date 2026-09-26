@@ -34,6 +34,30 @@ export function RefreshButton({ onDone }: { onDone: () => void }) {
 
   useEffect(() => stopPolling, [])
 
+  // Auch Läufe anzeigen, die nicht per Klick gestartet wurden (tägliche automatische
+  // Aktualisierung, Crawler Kevin): beim Öffnen und danach jede Minute kurz nachsehen.
+  useEffect(() => {
+    let abgebrochen = false
+    const pruefen = async () => {
+      try {
+        const next = await fetchRunAllStatus()
+        if (abgebrochen) return
+        setStatus(next)
+        if (next.laeuft && pollRef.current === null) poll()
+      } catch {
+        // Backend kurz nicht erreichbar - beim nächsten Intervall erneut versuchen.
+      }
+    }
+    void pruefen()
+    const intervall = setInterval(pruefen, 60_000)
+    return () => {
+      abgebrochen = true
+      clearInterval(intervall)
+    }
+    // poll ist stabil genug (setzt nur Intervalle), bewusst nur beim Einhängen registriert.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const handleClick = async () => {
     setStarting(true)
     try {
@@ -91,6 +115,9 @@ export function RefreshButton({ onDone }: { onDone: () => void }) {
           Fertig · {status.ergebnisse.filter((e) => e.status_ampel === 'gruen').length}/{status.ergebnisse.length}{' '}
           Quellen erfolgreich
         </span>
+      ) : null}
+      {!laeuft && status?.automatisch_um ? (
+        <span className="text-xs text-ink-faint">Automatisch täglich um {status.automatisch_um} Uhr</span>
       ) : null}
     </div>
   )

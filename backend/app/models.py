@@ -20,6 +20,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -92,6 +93,17 @@ class Tender(Base):
     # Bewertung wie ki_relevanz_score.
     gemerkt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     merk_notiz: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Als neue stark KI-relevante Ausschreibung gemeldet (nur genutzt, solange kein Suchprofil existiert).
+    ki_benachrichtigt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Go/No-Go-Bewertung durch das Sprachmodell (agents/bewertung.py), einmal berechnet und gespeichert.
+    # Herkunft der Angebotsfrist, falls nicht vom Portal geliefert (agents/frist_ergaenzung.py):
+    # "seite" = per Suchmuster aus der Verfahrensseite, "ki" = vom Sprachmodell mit geprüftem Beleg.
+    frist_quelle: Mapped[str | None] = mapped_column(String, nullable=True)
+    frist_ergaenzung_versucht: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    bewertung_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    bewertet_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Abgabe-Checkliste (26.09.2026, app/bewerbung.py): [{"id", "text", "art", "status"}]
+    checkliste_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
     erfasst_am: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     zuletzt_geprueft_am: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -108,6 +120,7 @@ class Tender(Base):
     ranking: Mapped["RankingScore | None"] = relationship(
         back_populates="tender", cascade="all, delete-orphan", uselist=False
     )
+    embedding: Mapped["TenderEmbedding | None"] = relationship(cascade="all, delete-orphan", uselist=False)
 
 
 class TenderDocument(Base):
@@ -178,6 +191,8 @@ class AssistantPreferences(Base):
     bevorzugte_kategorien: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     bevorzugte_regionen: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     mindestwert: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Go/No-Go-Bewertung (25.09.2026): Leistungen, Referenzen, Zertifikate, Größe - Freitext.
+    firmenprofil: Mapped[str | None] = mapped_column(Text, nullable=True)
     aktualisiert_am: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
@@ -208,6 +223,8 @@ class SearchProfileHit(Base):
     )
     gesehen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     markiert_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Schon per Mac-Mitteilung/Webhook gemeldet (app/benachrichtigung.py) - jeder Treffer nur einmal.
+    benachrichtigt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     profile: Mapped[SearchProfile] = relationship(back_populates="hits")
     tender: Mapped[Tender] = relationship()
@@ -275,6 +292,8 @@ class SourceHealthMetric(Base):
     erfolgreich: Mapped[bool] = mapped_column(Boolean, nullable=False)
     treffer_anzahl: Mapped[int | None] = mapped_column(Integer, nullable=True)
     neu_anzahl: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Datenqualität dieses Laufs (app/datenqualitaet.py): {"anzahl": n, "quoten": {feld: 0..1}}
+    qualitaet: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     aktualisiert_anzahl: Mapped[int | None] = mapped_column(Integer, nullable=True)
     fehlerrate: Mapped[float | None] = mapped_column(Float, nullable=True)
     fehlertyp: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -295,3 +314,58 @@ class RankingScore(Base):
     berechnet_am: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     tender: Mapped[Tender] = relationship(back_populates="ranking")
+
+
+class Verbesserungswunsch(Base):
+    """Kevins Wunschliste (Nutzeranfrage 25.09.2026): Kevin ändert selbst keinen Code, sondern
+    formuliert Verbesserungswünsche als klare Aufgaben, die Vincent in einer Claude-Code-Sitzung
+    umsetzen lässt (siehe README)."""
+
+    __tablename__ = "verbesserungswuensche"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    titel: Mapped[str] = mapped_column(Text, nullable=False)
+    beschreibung: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="offen")  # offen | erledigt
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class TenderEmbedding(Base):
+    """Bedeutungsvektor einer Ausschreibung für die Suche nach Bedeutung (app/semantik.py)."""
+
+    __tablename__ = "tender_embeddings"
+
+    tender_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenders.id", ondelete="CASCADE"), primary_key=True
+    )
+    modell: Mapped[str] = mapped_column(String, nullable=False)
+    vektor: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)  # normierte float32-Werte
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class KandidatenStand(Base):
+    """Inkrementelles Crawling (26.09.2026): Fingerabdruck der Listendaten je Kandidat. Bekannte,
+    unveränderte Ausschreibungen werden nicht bei jedem Lauf erneut im Detail abgerufen
+    (agents/discovery.py) - schont die Portale und macht Läufe um ein Vielfaches schneller."""
+
+    __tablename__ = "kandidaten_stand"
+
+    portal_id: Mapped[str] = mapped_column(String, ForeignKey("portals.id", ondelete="CASCADE"), primary_key=True)
+    externe_id: Mapped[str] = mapped_column(String, primary_key=True)
+    fingerabdruck: Mapped[str] = mapped_column(String, nullable=False)
+    zuletzt_abgerufen_am: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class Referenz(Base):
+    """Referenzprojekte des Unternehmens (26.09.2026): fließen in die Go/No-Go-Bewertung ein,
+    Kevin schlägt pro Ausschreibung die passenden vor."""
+
+    __tablename__ = "referenzen"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    titel: Mapped[str] = mapped_column(Text, nullable=False)
+    auftraggeber: Mapped[str | None] = mapped_column(Text, nullable=True)
+    jahr: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    volumen: Mapped[float | None] = mapped_column(Float, nullable=True)
+    beschreibung: Mapped[str | None] = mapped_column(Text, nullable=True)
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

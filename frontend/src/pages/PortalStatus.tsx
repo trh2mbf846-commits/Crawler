@@ -26,6 +26,16 @@ function ErrorRateBar({ rate }: { rate: number | null }) {
   )
 }
 
+
+// Datenqualität je Lauf (backend app/datenqualitaet.py) - Einbruch deutet auf Layout-Änderung hin.
+const QUALITAETSFELDER: Record<string, string> = {
+  angebotsfrist: 'Frist',
+  vergabestelle: 'Vergabestelle',
+  kurzbeschreibung: 'Beschreibung',
+  ort_region: 'Ort',
+  direktlink: 'Verfahrenslink',
+}
+
 export function PortalStatus() {
   const { data: portals, loading, error, reload } = useAsync(fetchPortals, [])
   const [runningIds, setRunningIds] = useState<Set<string>>(new Set())
@@ -105,6 +115,23 @@ export function PortalStatus() {
                   </dd>
                 </div>
               </dl>
+
+              {portal.qualitaet ? (
+                <div className="text-xs">
+                  <p className="mb-1 text-ink-faint">Datenqualität letzter Lauf ({portal.qualitaet.anzahl} Ausschreibungen)</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {Object.entries(QUALITAETSFELDER).map(([feld, label]) => {
+                      const quote = portal.qualitaet?.quoten[feld] ?? 0
+                      const klasse = quote >= 0.8 ? 'bg-ki-strongBg text-ki-strong' : quote >= 0.5 ? 'bg-urgent-yellowBg text-urgent-yellow' : 'bg-urgent-redBg text-urgent-red'
+                      return (
+                        <span key={feld} className={`rounded-md px-1.5 py-0.5 ${klasse}`} title={`Anteil der Ausschreibungen mit ${label}`}>
+                          {label} {Math.round(quote * 100)} %
+                        </span>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : null}
 
               {portal.tos_hinweis ? <p className="text-xs italic text-ink-faint">{portal.tos_hinweis}</p> : null}
 

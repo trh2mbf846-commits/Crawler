@@ -7,10 +7,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.agents.bewertung import bewerte
+from app.config import settings
 from app.db import get_db
 from app.models import Tender, TenderHistory
-from app.schemas import HistoryEntryOut, TenderDetailOut, TenderListOut
-from app.serializers import tender_to_detail_out, tender_to_out
+from app.prompts import llm_anbieter
+from app.schemas import BewertungOut, HistoryEntryOut, TenderDetailOut, TenderListOut
+from app.serializers import bewertung_to_out, tender_to_detail_out, tender_to_out
 from app.tender_queries import search_tenders
 
 router = APIRouter(tags=["tenders"])
@@ -24,14 +27,16 @@ def list_tenders(
     ki_relevanz_min: str | None = Query(None),
     frist_bis: date | None = Query(None),
     status: str | None = Query(None),
-    sort: str = Query("ranking", pattern="^(ranking|frist|veroeffentlichung)$"),
+    sort: str = Query("ranking", pattern="^(ranking|frist|veroeffentlichung|ki_relevanz)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    bedeutung: bool = Query(False),
     db: Session = Depends(get_db),
 ) -> TenderListOut:
     items, total = search_tenders(
         db, q=q, portal=portal, kategorie=kategorie, ki_relevanz_min=ki_relevanz_min,
         frist_bis=frist_bis, status=status, sort=sort, page=page, page_size=page_size,
+        bedeutung=bedeutung,
     )
     return TenderListOut(items=[tender_to_out(t) for t in items], total=total, page=page, page_size=page_size)
 
@@ -53,3 +58,22 @@ def get_tender_history(tender_id: str, db: Session = Depends(get_db)) -> list[Hi
         select(TenderHistory).where(TenderHistory.tender_id == tender_id).order_by(TenderHistory.erkannt_am)
     )
     return [HistoryEntryOut(feld=r.feld, alter_wert=r.alter_wert, neuer_wert=r.neuer_wert, erkannt_am=r.erkannt_am) for r in rows]
+
+
+@router.post("/tenders/{tender_id}/bewertung", response_model=BewertungOut)
+def bewerte_tender(tender_id: str, db: Session = Depends(get_db)) -> BewertungOut:
+    """Go/No-Go-Bewertung durch das Sprachmodell (agents/bewertung.py) - kann je nach Modell
+    einige Sekunden bis Minuten dauern; das Ergebnis wird gespeichert."""
+    tender = db.get(Tender, tender_id)
+    if tender is None:
+        raise HTTPException(404, "Ausschreibung nicht gefunden.")
+    if llm_anbieter() == "anthropic" and not settings.anthropic_api_key:
+        raise HTTPException(503, "Kein Sprachmodell eingerichtet (Ollama oder Anthropic-API-Key nötig).")
+    if bewerte(db, tender) is None:
+        raise HTTPException(
+            503,
+            "Das Sprachmodell hat nicht (brauchbar) geantwortet. Läuft Ollama? Beim ersten Aufruf nach "
+            "dem Start kann das Laden des Modells etwas dauern - bitte erneut versuchen.",
+        )
+    db.refresh(tender)
+    return bewertung_to_out(tender)

@@ -20,6 +20,7 @@ class TenderOut(BaseModel):
     portal: PortalRef
     veroeffentlichungsdatum: datetime | None
     angebotsfrist: datetime | None
+    frist_quelle: str | None = None  # None = vom Portal; "seite"/"ki" = nachträglich ermittelt
     fragenfrist: datetime | None
     verfahrensart: str | None
     cpv_codes: list[str]
@@ -50,10 +51,32 @@ class DokumentOut(BaseModel):
     url: str
 
 
+class BewertungOut(BaseModel):
+    empfehlung: str  # bewerben | pruefen | nicht_bewerben
+    passwert: int  # 0-100
+    zusammenfassung: str
+    begruendung: str
+    ausschlusskriterien: list[str] = []
+    pflichtnachweise: list[str] = []
+    zuschlagskriterien: list[str] = []
+    fristen: list[str] = []
+    fehlende_nachweise: list[str] = []
+    risiken: list[str] = []
+    naechste_schritte: list[str] = []
+    passende_referenzen: list[str] = []
+    entfernt_ohne_beleg: int = 0  # Punkte, die der Prüfer nicht im Quelltext fand und verworfen hat
+    quellen: list[str] = []  # woraus bewertet wurde (Unterlagen, Verfahrensseite, Bekanntmachung)
+    modell: str
+    firmenprofil_fehlte: bool = False
+    bewertet_am: datetime | None = None
+
+
 class TenderDetailOut(TenderOut):
     volltext: str | None
     dokumente: list[DokumentOut]
     ranking_aufschluesselung: RankingBreakdown
+    bewertung: BewertungOut | None = None
+    checkliste: list[ChecklistenPunkt] = []
 
 
 class TenderListOut(BaseModel):
@@ -83,6 +106,7 @@ class PortalHealthOut(BaseModel):
     letzte_trefferzahl: int | None
     fehlerrate_gleitend: float | None
     meldung: str | None
+    qualitaet: dict | None = None  # {"anzahl": n, "quoten": {feld: 0..1}} des letzten Laufs
 
 
 class SearchProfileIn(BaseModel):
@@ -143,6 +167,7 @@ class RunAllStatusOut(BaseModel):
     beendet_am: datetime | None
     aktuelle_portale: list[str]
     ergebnisse: list[RunAllPortalResultOut]
+    automatisch_um: str | None = None  # tägliche automatische Aktualisierung (HH:MM) oder None
 
 
 class AssistantMessageIn(BaseModel):
@@ -180,6 +205,7 @@ class AssistantActionOut(BaseModel):
 
 class AssistantPreferencesIn(BaseModel):
     prioritaeten_text: str | None = None
+    firmenprofil: str | None = None
     bevorzugte_kategorien: list[str] = []
     bevorzugte_regionen: list[str] = []
     mindestwert: float | None = None
@@ -195,3 +221,45 @@ class AssistantDigestOut(BaseModel):
     bald_ablaufend_anzahl: int
     portale_mit_problem: list[str]
     tenders: list[TenderOut]
+
+
+class WunschOut(BaseModel):
+    id: str
+    titel: str
+    beschreibung: str
+    status: str
+    erstellt_am: datetime
+
+
+class WunschStatusIn(BaseModel):
+    status: str  # offen | erledigt
+
+
+class ChecklistenPunkt(BaseModel):
+    id: str
+    text: str
+    art: str = "eigen"  # nachweis | ausschluss | frist | eigen
+    status: str = "offen"  # offen | vorhanden | fehlt | erledigt
+
+
+class ReferenzIn(BaseModel):
+    titel: str
+    auftraggeber: str | None = None
+    jahr: int | None = None
+    volumen: float | None = None
+    beschreibung: str | None = None
+
+
+class ReferenzOut(ReferenzIn):
+    id: str
+    erstellt_am: datetime
+
+
+class FristOut(BaseModel):
+    tender_id: str
+    titel: str
+    vergabestelle: str | None
+    art: str  # Angebotsfrist | Fragenfrist
+    datum: datetime
+    grund: str  # warum im Kalender: gemerkt / bewertet / Checkliste
+    direktlink: str

@@ -26,10 +26,12 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 
+from app import nachlauf
 from app.db import SessionLocal
 from app.models import Portal
 from app.pipeline import run_portal_cycle
 from app.schemas import RunAllPortalResultOut, RunAllStatusOut
+from app.tagesaktualisierung import anzeige_uhrzeit
 
 logger = logging.getLogger("ausschreibungscrawler.run_all")
 router = APIRouter(tags=["run"])
@@ -101,6 +103,8 @@ def _run_all_worker(portal_ids: list[str] | None = None) -> None:
             _state["laeuft"] = False
             _state["aktuelle_portale"] = []
             _state["beendet_am"] = datetime.utcnow()
+        # KI-Nachprüfung + Benachrichtigung über neue Treffer im Hintergrund (app/nachlauf.py).
+        nachlauf.starte_im_hintergrund()
 
 
 def start_run(portal_ids: list[str] | None = None) -> RunAllStatusOut:
@@ -148,4 +152,5 @@ def _status_out() -> RunAllStatusOut:
             beendet_am=_state["beendet_am"],
             aktuelle_portale=list(_state["aktuelle_portale"]),
             ergebnisse=[RunAllPortalResultOut(**e) for e in _state["ergebnisse"]],
+            automatisch_um=anzeige_uhrzeit(),
         )
