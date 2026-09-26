@@ -44,6 +44,8 @@ export const statusAmpelLabel: Record<StatusAmpel, string> = {
   gruen: 'Ordnungsgemäß',
   gelb: 'Eingeschränkt',
   rot: 'Gestört',
+  inaktiv: 'Nicht angebunden',
+  neu: 'Noch nicht gelaufen',
 }
 
 export const robotsStatusLabel: Record<RobotsStatus, string> = {

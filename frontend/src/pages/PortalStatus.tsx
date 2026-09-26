@@ -10,6 +10,8 @@ const ampelCardBorder: Record<string, string> = {
   gruen: 'border-l-ki-strong',
   gelb: 'border-l-urgent-yellow',
   rot: 'border-l-urgent-red',
+  inaktiv: 'border-l-line',
+  neu: 'border-l-line',
 }
 
 function ErrorRateBar({ rate }: { rate: number | null }) {
@@ -78,7 +80,7 @@ export function PortalStatus() {
 
       {!loading && !error && portals && portals.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2">
-          {portals.map((portal) => (
+          {[...portals].sort((a, b) => Number(b.aktiv) - Number(a.aktiv)).map((portal) => (
             <div
               key={portal.id}
               className={`flex flex-col gap-3 rounded-lg border border-l-4 border-line bg-surface p-4 shadow-card ${ampelCardBorder[portal.status_ampel]}`}

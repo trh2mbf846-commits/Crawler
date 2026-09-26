@@ -40,9 +40,11 @@ def record_run(
     fehlertyp: str | None = None,
     dauer_ms: int | None = None,
     qualitaet: dict | None = None,
+    fehler_anzahl: int | None = None,
 ) -> SourceHealthMetric:
     metric = SourceHealthMetric(
         qualitaet=qualitaet,
+        fehler_anzahl=fehler_anzahl,
         portal_id=portal.id,
         erfolgreich=erfolgreich,
         treffer_anzahl=treffer_anzahl,
@@ -72,13 +74,25 @@ def evaluate(db: Session, portal: Portal) -> dict:
         )
     )
 
+    if not portal.aktiv:
+        # Bewusst nicht angebunden (Login-Pflicht, Bot-Schutz, robots.txt) bzw. abgeschaltet - kein
+        # Problemzustand, daher eigene neutrale Ampel statt "gelb" (Nutzerfrage 26.09.2026: "warum
+        # steht nur eingeschränkt?").
+        return {
+            "status_ampel": "inaktiv",
+            "letzter_erfolgreicher_lauf": letzte[0].lauf_am if letzte and letzte[0].erfolgreich else None,
+            "letzte_trefferzahl": letzte[0].treffer_anzahl if letzte else None,
+            "fehlerrate_gleitend": None,
+            "meldung": "Nicht angebunden - wird beim Aktualisieren nicht abgefragt (Grund siehe Hinweis unten).",
+        }
+
     if not letzte:
         return {
-            "status_ampel": "gelb",
+            "status_ampel": "neu",
             "letzter_erfolgreicher_lauf": None,
             "letzte_trefferzahl": None,
             "fehlerrate_gleitend": None,
-            "meldung": "Noch kein Lauf protokolliert.",
+            "meldung": "Noch nicht gelaufen - klicke in der Übersicht auf „Aktualisieren“.",
         }
 
     letzter_erfolgreicher = next((m for m in letzte if m.erfolgreich), None)
@@ -106,16 +120,30 @@ def evaluate(db: Session, portal: Portal) -> dict:
 
     # Fehlerrate (Kapitel 21.3).
     letzte_fehlerrate = letzte[0].fehlerrate
-    if letzte_fehlerrate is not None and letzte_fehlerrate > settings.health_fehlerrate_warnung:
+    fehlgeschlagene_schritte = letzte[0].fehler_anzahl
+    if (
+        letzte_fehlerrate is not None
+        and letzte_fehlerrate > settings.health_fehlerrate_warnung
+        # Ältere Läufe ohne gespeicherte Anzahl werden wie bisher nur nach der Rate beurteilt.
+        and (fehlgeschlagene_schritte is None or fehlgeschlagene_schritte >= settings.health_fehlerrate_min_fehler)
+    ):
         ampel = "gelb" if ampel == "gruen" else ampel
         meldungen.append(f"Fehlerrate {letzte_fehlerrate:.0%} über Schwellenwert.")
 
     # Ausfall seit > 3x Intervall (Kapitel 21.3).
     if letzter_erfolgreicher is not None:
         max_alter = timedelta(minutes=portal.intervall_minuten * settings.health_ausfall_faktor_intervall)
+        if not settings.scheduler_enabled:
+            # Kein Dauerbetrieb (Mac/Render: Aktualisieren-Button bzw. täglich 07:00) - dann ist ein
+            # Tag ohne Lauf normal; erst nach 3 Tagen ohne erfolgreichen Lauf ist das auffällig.
+            max_alter = max(max_alter, timedelta(days=3))
         if datetime.utcnow() - letzter_erfolgreicher.lauf_am > max_alter:
             ampel = "rot"
-            meldungen.append("Kein erfolgreicher Lauf seit mehr als dem 3-fachen Intervall.")
+            tage = max_alter.total_seconds() / 86400
+            meldungen.append(
+                f"Kein erfolgreicher Lauf seit über {tage:.0f} Tagen." if tage >= 1
+                else "Kein erfolgreicher Lauf seit mehr als dem 3-fachen Intervall."
+            )
             _eskaliere_falls_noetig(
                 db, portal, "sonstiges",
                 f"Portal '{portal.name}': kein erfolgreicher Lauf seit über {max_alter}.",

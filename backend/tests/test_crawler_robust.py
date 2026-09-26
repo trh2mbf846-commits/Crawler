@@ -195,3 +195,43 @@ def test_referenzen_crud():
     assert geaendert["titel"] == "KI-Chatbot Landkreis Y"
     assert client.delete(f"/api/referenzen/{neu['id']}").status_code == 204
     assert client.get("/api/referenzen").json() == []
+
+
+# --- Quellstatus ohne Fehlalarme (Nutzerfrage "warum steht nur eingeschränkt?") --------------
+
+from app.config import settings  # noqa: E402
+from app.models import Portal  # noqa: E402
+
+
+def test_inaktive_und_neue_portale_sind_nicht_gelb(db, portal):
+    inaktiv = Portal(name="Vergabe24", slug="vergabe24", base_url="https://x.invalid/", aktiv=False)
+    db.add(inaktiv)
+    db.commit()
+    assert evaluate(db, inaktiv)["status_ampel"] == "inaktiv"
+    assert evaluate(db, portal)["status_ampel"] == "neu"
+
+
+def test_einzelner_null_treffer_lauf_bleibt_gruen(db, portal):
+    record_run(db, portal, erfolgreich=True, treffer_anzahl=0)
+    assert evaluate(db, portal)["status_ampel"] == "gruen"
+    record_run(db, portal, erfolgreich=True, treffer_anzahl=0)
+    assert evaluate(db, portal)["status_ampel"] == "gelb"
+
+
+def test_einzelner_fehlschlag_bei_wenigen_schritten_kein_alarm(db, portal):
+    record_run(db, portal, erfolgreich=True, treffer_anzahl=10, fehlerrate=0.5, fehler_anzahl=1)
+    assert evaluate(db, portal)["status_ampel"] == "gruen"
+    record_run(db, portal, erfolgreich=True, treffer_anzahl=10, fehlerrate=0.5, fehler_anzahl=5)
+    assert "Fehlerrate" in evaluate(db, portal)["meldung"]
+
+
+def test_ohne_dauerbetrieb_ist_ein_tag_ohne_lauf_normal(db, portal, monkeypatch):
+    monkeypatch.setattr(settings, "scheduler_enabled", False)
+    m = record_run(db, portal, erfolgreich=True, treffer_anzahl=10)
+    m.lauf_am = datetime.utcnow() - timedelta(days=2)
+    db.commit()
+    assert evaluate(db, portal)["status_ampel"] == "gruen"
+    m.lauf_am = datetime.utcnow() - timedelta(days=4)
+    db.commit()
+    ergebnis = evaluate(db, portal)
+    assert ergebnis["status_ampel"] == "rot" and "3 Tagen" in ergebnis["meldung"]

@@ -104,6 +104,7 @@ def run_portal_cycle(db: Session, portal: Portal) -> dict:
             treffer_anzahl=details.get("kandidaten_gesamt", 0),
             neu_anzahl=details.get("neu_oder_zu_pruefen", 0),
             fehlerrate=_fehlerrate_dieser_lauf(db, portal.id, start),
+            fehler_anzahl=_fehler_dieses_laufs(db, portal.id, start),
             dauer_ms=dauer_ms,
             qualitaet=datenqualitaet.messe(db, portal, start),
         )
@@ -128,3 +129,15 @@ def _fehlerrate_dieser_lauf(db: Session, portal_id: str, seit: datetime) -> floa
         return None
     fehlgeschlagen = sum(1 for j in lauf_jobs if j.status == "failed")
     return fehlgeschlagen / len(lauf_jobs)
+
+
+def _fehler_dieses_laufs(db: Session, portal_id: str, seit: datetime) -> int:
+    from sqlalchemy import func, select
+
+    from app.models import Job as JobModel
+
+    return db.scalar(
+        select(func.count(JobModel.id)).where(
+            JobModel.portal_id == portal_id, JobModel.erstellt_am >= seit, JobModel.status == "failed"
+        )
+    ) or 0

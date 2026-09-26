@@ -4,7 +4,8 @@ export type TenderStatus = 'neu' | 'aktualisiert' | 'frist_bald' | 'abgelaufen' 
 
 export type Zugangsart = 'oeffentlich' | 'registrierung_erforderlich'
 
-export type StatusAmpel = 'gruen' | 'gelb' | 'rot'
+// inaktiv = bewusst nicht angebunden, neu = aktiv, aber noch nie gelaufen (beides kein Problemzustand)
+export type StatusAmpel = 'gruen' | 'gelb' | 'rot' | 'inaktiv' | 'neu'
 
 export type EscalationKategorie =
   | 'login_erforderlich'

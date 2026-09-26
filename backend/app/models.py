@@ -292,6 +292,7 @@ class SourceHealthMetric(Base):
     erfolgreich: Mapped[bool] = mapped_column(Boolean, nullable=False)
     treffer_anzahl: Mapped[int | None] = mapped_column(Integer, nullable=True)
     neu_anzahl: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fehler_anzahl: Mapped[int | None] = mapped_column(Integer, nullable=True)  # fehlgeschlagene Schritte
     # Datenqualität dieses Laufs (app/datenqualitaet.py): {"anzahl": n, "quoten": {feld: 0..1}}
     qualitaet: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     aktualisiert_anzahl: Mapped[int | None] = mapped_column(Integer, nullable=True)

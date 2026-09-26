@@ -63,6 +63,8 @@ export function AmpelDot({ status }: { status: StatusAmpel }) {
     gruen: 'bg-ki-strong',
     gelb: 'bg-urgent-yellow',
     rot: 'bg-urgent-red',
+    inaktiv: 'bg-line',
+    neu: 'bg-ink-faint',
   }
   return (
     <span className="inline-flex items-center gap-2">

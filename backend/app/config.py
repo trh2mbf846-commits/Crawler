@@ -20,9 +20,14 @@ class Settings(BaseSettings):
     ranking_weight_aktualitaet: float = 0.1
 
     # Source Health Schwellenwerte, Kapitel 21.3.
-    health_null_treffer_warnung_ab: int = 1
+    # 2 statt 1 (26.09.2026): kleine Portale wie ITDZ Berlin haben regelmäßig einfach gerade keine
+    # offene Ausschreibung - ein einzelner 0-Treffer-Lauf ist kein Warnsignal.
+    health_null_treffer_warnung_ab: int = 2
     health_null_treffer_eskalation_ab: int = 3
     health_fehlerrate_warnung: float = 0.2
+    # Fehlerrate erst ab so vielen fehlgeschlagenen Schritten werten: seit dem inkrementellen
+    # Abrufen hat ein Lauf oft nur wenige Schritte, ein einzelner Fehlschlag ergäbe sonst gleich 33 %.
+    health_fehlerrate_min_fehler: int = 3
     health_ausfall_faktor_intervall: float = 3.0
     health_trefferrueckgang_warnung: float = 0.5
 
