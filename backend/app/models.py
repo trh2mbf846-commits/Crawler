@@ -370,3 +370,21 @@ class Referenz(Base):
     volumen: Mapped[float | None] = mapped_column(Float, nullable=True)
     beschreibung: Mapped[str | None] = mapped_column(Text, nullable=True)
     erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Thema(Base):
+    """Vom Nutzer pflegbare Themen (26.09.2026: "wie funktioniert die Erweiterung von Kategorien -
+    muss das immer über Claude Code passieren?"). Ein Thema ist zugleich Kategorie, liefert
+    Stichworte für die Einordnung und - wenn ki_bezogen - zusätzliche KI-Suchbegriffe
+    (Relevanz-Einstufung und TED-Suche). Siehe app/themen.py."""
+
+    __tablename__ = "themen"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    stichworte: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    ki_bezogen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Gelöschte Standard-Themen nicht beim nächsten Start wieder anlegen.
+    geloescht: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

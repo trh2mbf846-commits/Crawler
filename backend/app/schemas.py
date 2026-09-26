@@ -263,3 +263,14 @@ class FristOut(BaseModel):
     datum: datetime
     grund: str  # warum im Kalender: gemerkt / bewertet / Checkliste
     direktlink: str
+
+
+class ThemaIn(BaseModel):
+    name: str
+    stichworte: list[str] = []
+    ki_bezogen: bool = True
+    aktiv: bool = True
+
+
+class ThemaOut(ThemaIn):
+    id: str

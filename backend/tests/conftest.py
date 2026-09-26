@@ -21,6 +21,11 @@ def _kein_hintergrund_nachlauf(monkeypatch):
     from app import nachlauf
 
     monkeypatch.setattr(nachlauf, "starte_im_hintergrund", lambda: None)
+    from app import themen
+    from app.api import themen as themen_api
+
+    monkeypatch.setattr(themen, "ordne_im_hintergrund_neu_ein", lambda: None)
+    monkeypatch.setattr(themen_api, "ordne_im_hintergrund_neu_ein", lambda: None)
 
 
 @pytest.fixture(autouse=True)

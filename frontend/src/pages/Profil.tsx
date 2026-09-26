@@ -8,6 +8,7 @@ import {
   updateAssistantPreferences,
 } from '../api/client'
 import type { AssistantPreferences, Referenz, ReferenzInput } from '../api/types'
+import { ThemenPanel } from '../components/ThemenPanel'
 import { formatCurrency } from '../utils/format'
 
 // Mein Profil (26.09.2026): Firmenprofil + Referenzprojekte - Grundlage für Kevins
@@ -58,7 +59,7 @@ export function Profil() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-xl font-semibold text-ink">Mein Profil</h1>
+        <h1 className="text-xl font-semibold text-ink">Mein Profil & Themen</h1>
         <p className="mt-0.5 text-sm text-ink-muted">
           Je genauer Firmenprofil und Referenzen, desto aussagekräftiger Kevins „Bewerben oder nicht?“ – er vergleicht jede
           Ausschreibung damit und schlägt passende Referenzen vor.
@@ -136,6 +137,8 @@ export function Profil() {
           ))}
         </ul>
       </section>
+
+      <ThemenPanel />
     </div>
   )
 }

@@ -16,6 +16,7 @@ from app.agents.classification import CATEGORY_ORDER
 from app.agents.connector import ZUSATZPORTALE
 from app.db import SessionLocal, init_db
 from app.models import Category, Portal
+from app.themen import lege_standard_themen_an
 
 PFLICHT_PORTALE = [
     dict(
@@ -79,6 +80,8 @@ def run_seed(db: Session) -> None:
     for daten in PFLICHT_PORTALE:
         if db.scalars(select(Portal).where(Portal.slug == daten["slug"])).first() is None:
             db.add(Portal(**daten))
+
+    lege_standard_themen_an(db)
 
     for zusatz in ZUSATZPORTALE:
         vorhanden = db.scalars(select(Portal).where(Portal.slug == zusatz["slug"])).first()

@@ -91,7 +91,9 @@ SYSTEM_TEMPLATE = (
     "wenn Vincent danach fragt oder es offensichtlich sinnvoll ist - diese werden ihm aber immer "
     "erst zur Bestätigung vorgelegt, du führst sie nie direkt aus. Rufe pro Antwort höchstens "
     "eines dieser Werkzeuge auf.\n"
-    "- Wünscht Vincent eine Änderung am Crawler selbst (neues Portal, neue Funktion, Fehler), "
+    "- Neue Themen/Kategorien (z. B. 'nimm auch Robotik auf') legst du selbst mit thema_anlegen an - "
+    "dafür ist keine Code-Änderung nötig.\n"
+    "- Wünscht Vincent eine andere Änderung am Crawler (neues Portal, neue Funktion, Fehler), "
     "kannst du keinen Code ändern - biete an, den Wunsch mit verbesserungswunsch_notieren auf die "
     "Wunschliste zu setzen.\n"
     "- Fragt er, ob er sich auf eine Ausschreibung bewerben soll, nutze bewerbung_bewerten.\n"
@@ -202,6 +204,27 @@ TOOLS = [
 # Schreibende Werkzeuge - werden NIE direkt ausgeführt (siehe Moduldocstring), sondern lösen
 # einen Vorschlag aus, den Vincent im Frontend bestätigen oder ablehnen kann.
 WRITE_TOOLS = [
+    {
+        "name": "thema_anlegen",
+        "description": (
+            "Nimmt ein neues Thema in den Crawler auf (z. B. 'Robotik', 'KI-Avatare'): Es wird zur "
+            "Kategorie, und Ausschreibungen mit den Stichworten werden künftig danach eingeordnet "
+            "(bei ki_bezogen zusätzlich als KI-relevant geprüft und bei TED gesucht). Gib 5-15 "
+            "typische deutsche Stichworte an, wie Behörden sie in Ausschreibungen schreiben - "
+            "spezifisch für das Thema, keine Oberbegriffe, die auch viel anderes treffen (für "
+            "'Drohnen' also 'drohne', 'uas', aber nicht 'flugzeug'). ki_bezogen nur true, wenn das "
+            "Thema selbst Künstliche Intelligenz ist (KI-Avatare ja, Drohnen nein)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "stichworte": {"type": "array", "items": {"type": "string"}},
+                "ki_bezogen": {"type": "boolean", "description": "true nur, wenn das Thema selbst KI ist"},
+            },
+            "required": ["name", "stichworte"],
+        },
+    },
     {
         "name": "verbesserungswunsch_notieren",
         "description": (
@@ -508,6 +531,11 @@ def _beschreibe_aktion(db: Session, name: str, tool_input: dict) -> str:
         return f"Kevin möchte einen Aktualisieren-Lauf für „{ziel}“ starten."
     if name == "suchprofil_anlegen":
         return f"Kevin möchte das Suchprofil „{tool_input.get('name', '(ohne Namen)')}“ anlegen."
+    if name == "thema_anlegen":
+        return (
+            f"Kevin möchte das Thema „{tool_input.get('name', '?')}“ aufnehmen, Stichworte: "
+            f"{', '.join(tool_input.get('stichworte') or [])}"
+        )
     if name == "verbesserungswunsch_notieren":
         return f"Kevin möchte auf die Wunschliste setzen: „{tool_input.get('titel', '(ohne Titel)')}“ – {tool_input.get('beschreibung', '')}"
     if name == "ausschreibung_merken":
@@ -614,6 +642,7 @@ _ABSICHTEN: list[tuple[str, re.Pattern]] = [
     ("bewertung", re.compile(r"bewerb|go.?no|lohnt|passt .*zu (uns|mir)|chance|sollt?en? (wir|ich)|checkliste|nachweis|eignung|referenz", re.I)),
     ("fristen", re.compile(r"frist|deadline|bis wann|kalender|termin|diese woche|nächste woche|naechste woche|läuft .*ab", re.I)),
     ("status", re.compile(r"portal|quelle|quellstatus|funktioniert|kaputt|aktualisier|crawl|durchlauf|lauf\b", re.I)),
+    ("thema", re.compile(r"thema|themen|kategorie|aufnehmen|mit aufnehm|auch nach .* suchen", re.I)),
     ("wunsch", re.compile(r"wunsch|wünsch|feature|neue funktion|einbauen|verbesser|crawler soll|bug|fehler im crawler|kannst du .*(bauen|ändern|hinzufügen)", re.I)),
 ]
 _WERKZEUGE_JE_ABSICHT = {
@@ -622,6 +651,7 @@ _WERKZEUGE_JE_ABSICHT = {
     "fristen": {"fristen_uebersicht", "suche_ausschreibungen", "checkliste_anzeigen", "ausschreibung_merken"},
     "status": {"quellstatus", "aktualisieren_starten"},
     "wunsch": {"verbesserungswunsch_notieren"},
+    "thema": {"thema_anlegen", "verbesserungswunsch_notieren"},
 }
 
 
@@ -712,6 +742,8 @@ def _vorschlag_fehler(db: Session, name: str, tool_input: dict) -> str | None:
         return "Unbekannter portal_slug - nur Slugs aus der Portal-Liste im Systemprompt verwenden, oder weglassen für alle."
     if name == "suchprofil_anlegen" and not str(tool_input.get("name") or "").strip():
         return "Das Suchprofil braucht einen Namen."
+    if name == "thema_anlegen" and not (str(tool_input.get("name") or "").strip() and tool_input.get("stichworte")):
+        return "Name und Stichworte des Themas sind nötig."
     if name == "verbesserungswunsch_notieren" and not (
         str(tool_input.get("titel") or "").strip() and str(tool_input.get("beschreibung") or "").strip()
     ):
@@ -809,7 +841,28 @@ def execute_assistant_action(db: Session, name: str, tool_input: dict) -> Assist
         return _aktion_ausschreibung_merken(db, tool_input)
     if name == "verbesserungswunsch_notieren":
         return _aktion_wunsch_notieren(db, tool_input)
+    if name == "thema_anlegen":
+        return _aktion_thema_anlegen(db, tool_input)
     return AssistantActionResult(False, f"Unbekannte Aktion: {name}")
+
+
+def _aktion_thema_anlegen(db: Session, tool_input: dict) -> AssistantActionResult:
+    from fastapi import HTTPException
+
+    from app.api.themen import speichere_thema
+    from app.schemas import ThemaIn
+
+    try:
+        thema = speichere_thema(db, ThemaIn(
+            name=str(tool_input.get("name") or ""),
+            stichworte=[str(s) for s in tool_input.get("stichworte") or []],
+            ki_bezogen=tool_input.get("ki_bezogen", True) is not False,
+        ))
+    except HTTPException as exc:
+        return AssistantActionResult(False, str(exc.detail))
+    return AssistantActionResult(
+        True, f"Thema „{thema.name}“ angelegt - offene Ausschreibungen werden gerade neu eingeordnet."
+    )
 
 
 def _aktion_wunsch_notieren(db: Session, tool_input: dict) -> AssistantActionResult:

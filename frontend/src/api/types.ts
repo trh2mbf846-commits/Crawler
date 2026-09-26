@@ -110,6 +110,16 @@ export interface Referenz {
 
 export type ReferenzInput = Omit<Referenz, 'id' | 'erstellt_am'>
 
+export interface Thema {
+  id: string
+  name: string
+  stichworte: string[]
+  ki_bezogen: boolean
+  aktiv: boolean
+}
+
+export type ThemaInput = Omit<Thema, 'id'>
+
 export interface Wunsch {
   id: string
   titel: string

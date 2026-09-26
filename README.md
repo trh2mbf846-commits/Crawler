@@ -43,6 +43,30 @@ Suche, Detailansicht, Suchprofile, Quellstatus-Dashboard mit Quellen-Übersicht,
 Entscheidungs-Posteingang, Crawler-Kevin-Tab). 82 automatisierte Tests plus reale Testläufe
 gegen 7 Live-Portale mit 7306 echten Ausschreibungen.
 
+### Themen selbst pflegen: KI-Avatare, KI-Training & mehr (Update 26.09.2026)
+
+Nutzerfrage: "Können wir KI-Avatare und KI-Training dazufügen - und wie funktioniert die
+Erweiterung von Kategorien, muss das immer über Claude Code passieren?" Bisher ja: Kategorien und
+KI-Suchbegriffe standen fest im Code. Jetzt gibt es **Themen** (`app/themen.py`, Tabelle `themen`,
+`api/themen.py`), pflegbar unter **"Mein Profil & Themen"** oder per Zuruf an Kevin
+(Werkzeug `thema_anlegen`, bestätigungspflichtig):
+
+- Ein Thema wird zur Kategorie in der Übersicht; Ausschreibungen mit einem seiner Stichworte werden
+  automatisch zugeordnet (auch rückwirkend: nach jeder Änderung werden offene Ausschreibungen im
+  Hintergrund neu eingeordnet).
+- "KI-bezogen": Stichworte zählen zusätzlich als KI-Treffer (danach entscheidet wie immer die
+  strengere KI-Nachprüfung) und werden in die TED-Suche aufgenommen.
+- Kombi-Stichworte mit "+" (`schulung + ki`): alle Teile müssen vorkommen - Behörden schreiben
+  selten "KI-Schulung" am Stück. Abgleich nur am Wortanfang, kurze Teile wie "ki" nur als ganzes
+  Wort (kein Fehltreffer bei "Kita"/"Kiel").
+- Standard-Themen: **"KI-Avatare & digitale Assistenten"** und **"KI-Training & Schulung"**
+  (Schulungen für Beschäftigte wie auch Modelltraining/Datenannotation). Gelöschte
+  Standard-Themen kommen nicht wieder.
+- Ehrlicher Befund: im 2-Tages-Ausschnitt echter Daten (1547 Ausschreibungen) gab es zu beiden
+  Themen keine Ausschreibung, bei TED EU-weit seit Mai 3 zu "Avatar". Nischenthemen - sie greifen,
+  sobald so etwas ausgeschrieben wird.
+- Code-Änderungen braucht es weiterhin für neue Portale oder neue Funktionen (Kevins Wunschliste).
+
 ### Robuster Crawler, Bewerbungsalltag, fähigerer Kevin (Update 26.09.2026)
 
 Nach einer zweiten Recherche zu professionellen Crawlern/Agenten (Anthropic "Building Effective

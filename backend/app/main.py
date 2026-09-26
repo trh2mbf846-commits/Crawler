@@ -8,7 +8,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from app import nachlauf
-from app.api import assistant, bewerbung, categories, escalations, portals, run, search_profiles, tenders, wuensche
+from app.api import (
+    assistant,
+    bewerbung,
+    categories,
+    escalations,
+    portals,
+    run,
+    search_profiles,
+    tenders,
+    themen,
+    wuensche,
+)
 from app.bereinigung import bereinige_unbrauchbare_ausschreibungen
 from app.config import settings
 from app.db import SessionLocal, init_db
@@ -61,6 +72,7 @@ app.include_router(run.router, prefix="/api", dependencies=_geschuetzt)
 app.include_router(assistant.router, prefix="/api", dependencies=_geschuetzt)
 app.include_router(wuensche.router, prefix="/api", dependencies=_geschuetzt)
 app.include_router(bewerbung.router, prefix="/api", dependencies=_geschuetzt)
+app.include_router(themen.router, prefix="/api", dependencies=_geschuetzt)
 
 
 @app.get("/api/health")

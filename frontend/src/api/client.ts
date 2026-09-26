@@ -19,6 +19,8 @@ import type {
   Tender,
   TenderDetail,
   TenderQuery,
+  Thema,
+  ThemaInput,
   Wunsch,
 } from './types'
 
@@ -257,4 +259,19 @@ export function speichereReferenz(eingabe: ReferenzInput, id?: string): Promise<
 
 export function loescheReferenz(id: string): Promise<void> {
   return request<void>(`/referenzen/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export function fetchThemen(): Promise<Thema[]> {
+  return request<Thema[]>('/themen')
+}
+
+export function speichereThema(eingabe: ThemaInput, id?: string): Promise<Thema> {
+  return request<Thema>(id ? `/themen/${encodeURIComponent(id)}` : '/themen', {
+    method: id ? 'PUT' : 'POST',
+    body: JSON.stringify(eingabe),
+  })
+}
+
+export function loescheThema(id: string): Promise<void> {
+  return request<void>(`/themen/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }

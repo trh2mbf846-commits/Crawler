@@ -4,6 +4,7 @@ import {
   executeAssistantAction,
   fetchAssistantDigest,
   fetchAssistantPreferences,
+  fetchCategories,
   fetchWuensche,
   loescheWunsch,
   sendAssistantMessage,
@@ -45,6 +46,12 @@ function PraeferenzenPanel({ onClose }: { onClose: () => void }) {
   const [speichernd, setSpeichernd] = useState(false)
   const [fehler, setFehler] = useState<string | null>(null)
   const [gespeichert, setGespeichert] = useState(false)
+  // Feste Grundkategorien + eigene Themen (backend /api/categories) statt fester Liste.
+  const [kategorien, setKategorien] = useState<string[]>([...CATEGORIES])
+
+  useEffect(() => {
+    fetchCategories().then(setKategorien).catch(() => undefined)
+  }, [])
 
   useEffect(() => {
     fetchAssistantPreferences()
@@ -130,7 +137,7 @@ function PraeferenzenPanel({ onClose }: { onClose: () => void }) {
           <div>
             <span className="text-xs font-medium text-ink-muted">Bevorzugte Kategorien</span>
             <div className="mt-1 flex flex-wrap gap-1.5">
-              {CATEGORIES.map((kategorie) => (
+              {kategorien.map((kategorie) => (
                 <button
                   key={kategorie}
                   type="button"

@@ -55,11 +55,30 @@ def _ft_query() -> str:
         "technische planung", "ingenieurleistungen",
         "strategieberatung", "unternehmensberatung",
     ]
+    # Zusätzlich die Stichworte KI-bezogener Themen aus der Oberfläche (app/themen.py), z. B.
+    # "ki-avatar", "ki-schulung" - sonst lieferte TED solche Ausschreibungen gar nicht erst.
+    for b in _themen_begriffe():
+        if b not in begriffe:
+            begriffe.append(b)
     ft_clauses = " OR ".join(f'FT ~ "{b}"' for b in begriffe)
     cutoff = (datetime.utcnow() - timedelta(days=_FENSTER_TAGE)).strftime("%Y%m%d")
     # form-type = competition (25.09.2026): nur Auftragsbekanntmachungen, auf die man sich bewerben
     # kann - ohne den Filter kamen auch Zuschlagsmitteilungen (Auftrag schon vergeben) mit.
     return f'CY = DEU AND PD >= {cutoff} AND form-type = competition AND ({ft_clauses})'
+
+
+def _themen_begriffe() -> list[str]:
+    try:
+        from app.db import SessionLocal
+        from app.themen import ted_suchbegriffe
+
+        db = SessionLocal()
+        try:
+            return ted_suchbegriffe(db)
+        finally:
+            db.close()
+    except Exception:  # Themen sind eine Ergänzung - TED läuft notfalls mit den festen Begriffen
+        return []
 
 
 class TedConnector(BaseConnector):

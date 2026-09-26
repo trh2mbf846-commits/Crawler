@@ -13,6 +13,7 @@ from app import prompts
 from app.agents import ranking, search
 from app.keywords import find_cpv_hits, find_keyword_hits
 from app.models import Category, Job, Tender, TenderCategory
+from app.themen import themen_treffer
 
 CATEGORY_ORDER = [
     "KI & Machine Learning",
@@ -61,6 +62,9 @@ def run_classification(db: Session, job: Job) -> dict:
 
     text_basis = f"{tender.titel} {tender.kurzbeschreibung or ''}"
     keyword_hits = find_keyword_hits(tender.titel, tender.kurzbeschreibung, tender.volltext)
+    # Vom Nutzer gepflegte Themen (app/themen.py): Stichworte KI-bezogener Themen zählen als KI-Treffer.
+    themen_namen, themen_ki_stichworte = themen_treffer(db, tender.titel, tender.kurzbeschreibung)
+    keyword_hits = list(dict.fromkeys(keyword_hits + themen_ki_stichworte))
     cpv_hits = find_cpv_hits(tender.cpv_codes)
 
     # Die CPV-Präfixe in keywords.py (72000000, 72200000, ...) sind generische "IT-Dienste/
@@ -101,7 +105,7 @@ def run_classification(db: Session, job: Job) -> dict:
     tender.ki_relevanz_begruendung = begruendung
     tender.ki_relevanz_quelle = quelle
 
-    kategorien = _kategorisieren(text_basis, keyword_hits, cpv_hits)
+    kategorien = _kategorisieren(text_basis, keyword_hits, cpv_hits) + themen_namen
     if not kategorien:
         llm_kat = prompts.call_llm_json(
             prompts.KATEGORISIERUNG_SYSTEM,
