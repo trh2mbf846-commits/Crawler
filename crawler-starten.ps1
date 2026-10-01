@@ -178,7 +178,7 @@ if (-not (Test-Path $browserOk) -and -not (Test-Path $browserAus)) {
 $envDatei = Join-Path $Backend '.env'
 if (-not (Test-Path $envDatei)) {
     $zeilen = @(
-        '# Kein automatisches Hintergrund-Crawling ausser dem taeglichen Lauf (Standard 07:00, nur wenn der Rechner an ist).',
+        '# Kein automatisches Hintergrund-Crawling ausser dem taeglichen Lauf (Standard 09:00, nur wenn der Rechner an ist).',
         'CRAWLER_SCHEDULER_ENABLED=false',
         '# Crawler Kevin laeuft kostenlos ueber Ollama (https://ollama.com). Optional stattdessen Claude',
         '# (kostenpflichtig): Raute entfernen und den eigenen Schluessel eintragen:',

@@ -1,12 +1,12 @@
-"""Tägliche automatische Aktualisierung (Nutzeranfrage 25.09.2026: "jeden Morgen um 7 Uhr ein Lauf,
+"""Tägliche automatische Aktualisierung (Nutzeranfrage 25.09.2026: "jeden Morgen ein Lauf, zunächst 7 Uhr, am 01.10.2026 auf 9 Uhr verschoben,
 statt selbst auf Aktualisieren zu klicken").
 
 Unabhängig vom periodischen Portal-Scheduler (scheduler.py, im Deployment/Mac-Start bewusst aus):
 genau ein Lauf pro Tag zur eingestellten Uhrzeit (CRAWLER_AUTO_AKTUALISIEREN_UHRZEIT, Default
-"07:00", lokale Zeit des Rechners; leer = aus). Nutzt denselben Lauf wie der Aktualisieren-Button
+"09:00", lokale Zeit des Rechners; leer = aus). Nutzt denselben Lauf wie der Aktualisieren-Button
 (api/run.py:start_run), der Fortschritt ist also ganz normal in der Übersicht sichtbar.
 
-Läuft nur, solange der Crawler läuft. War er um 7 Uhr aus, wird der verpasste Lauf beim nächsten
+Läuft nur, solange der Crawler läuft. War er um 9 Uhr aus, wird der verpasste Lauf beim nächsten
 Start nachgeholt (kurz nach dem Start, sofern heute seit der eingestellten Uhrzeit noch kein Lauf
 stattgefunden hat).
 """

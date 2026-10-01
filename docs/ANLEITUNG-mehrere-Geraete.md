@@ -117,7 +117,7 @@ Tablet, Handy – öffnen ihn einfach im Browser. Es gibt nur **eine** Datenbank
 **Worauf du achten musst:**
 - **Der Mac muss wach bleiben und der Crawler laufen**, sonst sind die anderen Geräte „offline“.
   Ruhezustand verhindern: Systemeinstellungen → Batterie/Energie, oder im Terminal
-  `caffeinate -d` laufen lassen. Der tägliche 07:00-Lauf klappt auch nur, wenn der Mac dann an ist.
+  `caffeinate -d` laufen lassen. Der tägliche 09:00-Lauf klappt auch nur, wenn der Mac dann an ist.
 - ⚠️ **Es gibt noch keinen Passwortschutz.** Jeder im selben Netz kann alles bedienen (auch
   Kevins Aktionen bestätigen). Nur im **eigenen, vertrauenswürdigen** Netz nutzen – **nicht** im
   Gäste-WLAN, Café oder Firmennetz mit fremden Geräten.
@@ -156,7 +156,7 @@ zu beachten:
    Mit Disk dauerhaft sicher.
 4. **Alle sehen dieselben Daten** – auch dein Firmenprofil und die Referenzen. Gedacht ist das
    System als Ein-Personen-Werkzeug; mehrere Nutzer teilen sich Merkliste, Profil und Themen.
-5. Der 07:00-Lauf funktioniert nur, solange der Dienst „wach“ ist; Render-Tarife ohne Dauerbetrieb
+5. Der 09:00-Lauf funktioniert nur, solange der Dienst „wach“ ist; Render-Tarife ohne Dauerbetrieb
    schlafen ein.
 
 ---

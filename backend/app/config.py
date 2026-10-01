@@ -80,7 +80,7 @@ class Settings(BaseSettings):
 
     # Tägliche automatische Aktualisierung (Nutzeranfrage 25.09.2026), lokale Uhrzeit "HH:MM",
     # leer = aus. Unabhängig von scheduler_enabled, siehe app/tagesaktualisierung.py.
-    auto_aktualisieren_uhrzeit: str = "07:00"
+    auto_aktualisieren_uhrzeit: str = "09:00"
 
     # Benachrichtigung bei neuen Treffern (Nutzeranfrage 25.09.2026), siehe app/benachrichtigung.py:
     # Mac-Mitteilung (nur unter macOS wirksam) und - falls gesetzt - zusätzlich an
@@ -94,7 +94,7 @@ class Settings(BaseSettings):
     # simplen JSON-POST mit "text"/"content"). Ohne gesetzten Wert bleibt es beim reinen
     # Pull-Kurzbericht wie bisher, nur der Scheduler muss dafür laufen (CRAWLER_SCHEDULER_ENABLED).
     digest_webhook_url: str | None = None
-    digest_stunde: int = 7  # Uhrzeit (UTC) für den täglichen Kurzbericht, falls Webhook gesetzt
+    digest_stunde: int = 9  # Uhrzeit (lokale Zeit des Rechners) für den täglichen Kurzbericht, falls Webhook gesetzt
 
 
 settings = Settings()

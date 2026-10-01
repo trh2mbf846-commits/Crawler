@@ -134,7 +134,7 @@ def evaluate(db: Session, portal: Portal) -> dict:
     if letzter_erfolgreicher is not None:
         max_alter = timedelta(minutes=portal.intervall_minuten * settings.health_ausfall_faktor_intervall)
         if not settings.scheduler_enabled:
-            # Kein Dauerbetrieb (Mac/Render: Aktualisieren-Button bzw. täglich 07:00) - dann ist ein
+            # Kein Dauerbetrieb (Mac/Render: Aktualisieren-Button bzw. täglich 09:00) - dann ist ein
             # Tag ohne Lauf normal; erst nach 3 Tagen ohne erfolgreichen Lauf ist das auffällig.
             max_alter = max(max_alter, timedelta(days=3))
         if datetime.utcnow() - letzter_erfolgreicher.lauf_am > max_alter:

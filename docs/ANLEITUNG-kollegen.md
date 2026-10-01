@@ -83,8 +83,8 @@ nutzt; zum Beenden das Fenster schließen.
 
 - **Starten:** Doppelklick wie in Schritt 4. Bei jedem Start holt sich der Crawler automatisch die
   neueste Version (braucht Internet; ohne Internet läuft die vorhandene).
-- **Täglicher Lauf:** Der Crawler aktualisiert sich jeden Tag um 07:00 Uhr von selbst – aber nur,
-  wenn er dann läuft. Wurde 07:00 verpasst, holt er es beim nächsten Start nach.
+- **Täglicher Lauf:** Der Crawler aktualisiert sich jeden Tag um 09:00 Uhr von selbst – aber nur,
+  wenn er dann läuft. Wurde 09:00 verpasst, holt er es beim nächsten Start nach.
 - **Benachrichtigung:** Auf dem Mac kommt bei neuen passenden Treffern eine Mitteilung.
 - **Sicherung:** Auf „Mein Profil & Themen“ unten **„Datenbank-Sicherung herunterladen“** – das ist
   deine ganze persönliche Datenbank in einer Datei.

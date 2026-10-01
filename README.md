@@ -120,7 +120,7 @@ Claude, falls ein API-Key gesetzt ist).
   öffentliche Liste alle Vergabestellen der Plattform (live: 1176 statt 407, u. a. Berlin,
   Schleswig-Holstein, Niedersachsen, NRW, MV). Slug bleibt `vergabe-bayern` (keine Dubletten).
 - **Täglich automatisch aktualisieren** (`app/tagesaktualisierung.py`): `CRAWLER_AUTO_AKTUALISIEREN_UHRZEIT`
-  (Default `07:00`, lokale Zeit, leer = aus); ein verpasster Lauf wird beim nächsten Start nachgeholt.
+  (Default `09:00`, lokale Zeit, leer = aus); ein verpasster Lauf wird beim nächsten Start nachgeholt.
   Der Aktualisieren-Button zeigt automatisch gestartete Läufe und die Uhrzeit an.
 - **KI-Nachprüfung** (`agents/ki_nachpruefung.py`): nach jedem Lauf prüft das Sprachmodell alle
   als "stark"/"möglich" markierten Ausschreibungen mit strengeren Regeln nach (KI muss Kern des
@@ -300,7 +300,7 @@ auf einmal, damit es direkt perfekt ist". Drei Ausbaustufen:
 - **Echte Push-Benachrichtigung für den Kurzbericht** (`backend/app/agents/digest.py`,
   `app/scheduler.py`): bislang wurde der proaktive Kurzbericht (siehe oben) nur beim Öffnen
   von Kevins Chat-Tab angezeigt (reines Pull-Modell). Optional (`CRAWLER_DIGEST_WEBHOOK_URL`)
-  schickt ein täglicher Scheduler-Job (`CRAWLER_DIGEST_STUNDE`, Default 7 Uhr) denselben
+  schickt ein täglicher Scheduler-Job (`CRAWLER_DIGEST_STUNDE`, Default 9 Uhr) denselben
   Kurzbericht zusätzlich per POST-Webhook - Payload enthält sowohl `text` (Slack/Mattermost-
   kompatibel) als auch `content` (Discord-kompatibel), passt sich also ohne weitere
   Konfiguration an gängige Chat-Webhook-Formate an (auch für n8n/Zapier nutzbar). Ohne
@@ -435,7 +435,7 @@ Keyword-/CPV-Klassifikation (Kapitel 4.1/4.2) unverändert weiter - die LLM-Stuf
 wird dann einfach übersprungen (ebenso die Selbstdiagnose bei Quell-Eskalationen, siehe oben).
 Optional `CRAWLER_DIGEST_WEBHOOK_URL` (Slack/Discord/Mattermost/n8n/Zapier-kompatible
 Incoming-Webhook-URL) für den täglichen Kurzbericht per Push, `CRAWLER_DIGEST_STUNDE` (Default
-`7`, UTC) für die Uhrzeit des täglichen Jobs.
+`9`, lokale Zeit des Rechners) für die Uhrzeit des täglichen Jobs.
 
 ## Deployment (Aktualisieren-Button statt Dauerbetrieb)
 
