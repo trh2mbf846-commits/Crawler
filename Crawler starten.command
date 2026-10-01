@@ -189,7 +189,16 @@ fi
 
 # --- Starten -----------------------------------------------------------------------------
 cd "$PROJEKT/backend"
+# Standard: nur dieser Rechner. Für Zugriff von anderen Geräten im selben WLAN/LAN in
+# backend/.env die Zeile CRAWLER_HOST=0.0.0.0 eintragen (siehe docs/ANLEITUNG-mehrere-Geraete.md;
+# Achtung: es gibt noch keinen Passwortschutz - nur in einem vertrauenswürdigen Netz verwenden).
+HOST="$(sed -n 's/^[[:space:]]*CRAWLER_HOST=//p' .env 2>/dev/null | tail -1)"
+HOST="${HOST:-127.0.0.1}"
 schritt "Crawler läuft auf $URL"
+if [ "$HOST" != "127.0.0.1" ]; then
+  LAN_IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)"
+  [ -n "$LAN_IP" ] && printf '\033[1mAndere Geräte im selben Netz:\033[0m http://%s:%s\n' "$LAN_IP" "$PORT"
+fi
 echo "Zum Beenden dieses Fenster schließen oder Ctrl+C drücken."
 
 (
@@ -202,4 +211,4 @@ echo "Zum Beenden dieses Fenster schließen oder Ctrl+C drücken."
   done
 ) &
 
-exec .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT"
+exec .venv/bin/python -m uvicorn app.main:app --host "$HOST" --port "$PORT"

@@ -383,6 +383,9 @@ doppelklicken. Beim ersten Start richtet das Skript alles ein (ca. 5 Minuten), d
   Antworten): `CRAWLER_ANTHROPIC_API_KEY` in `backend/.env` eintragen - dann wird Ollama
   übersprungen.
 - Daten bleiben in `backend/data/` zwischen den Starts erhalten.
+- **Auf mehreren Geräten nutzen** (zweiter Mac, Windows/Linux per Docker, andere Geräte per
+  Browser im WLAN, online): siehe [docs/ANLEITUNG-mehrere-Geraete.md](docs/ANLEITUNG-mehrere-Geraete.md).
+  Für Zugriff von anderen Geräten im selben Netz in `backend/.env` `CRAWLER_HOST=0.0.0.0` eintragen.
 
 ## Schnellstart
 
