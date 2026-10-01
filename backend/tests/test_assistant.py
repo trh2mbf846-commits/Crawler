@@ -80,7 +80,7 @@ def _angelegte_ausschreibung(db, portal, **overrides):
         "vergabestelle": "Testamt",
         "ort_region": "Berlin",
         "veroeffentlichungsdatum": "2026-08-01T00:00:00",
-        "angebotsfrist": "2026-09-30T00:00:00",
+        "angebotsfrist": "2099-09-30T00:00:00",
         "fragenfrist": None,
         "verfahrensart": "Offenes Verfahren",
         "cpv_codes": [],

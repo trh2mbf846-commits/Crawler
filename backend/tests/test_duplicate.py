@@ -14,7 +14,7 @@ def _normalized(**overrides):
         "vergabestelle": "Testamt",
         "ort_region": "Berlin",
         "veroeffentlichungsdatum": "2026-08-01T00:00:00",
-        "angebotsfrist": "2026-09-30T00:00:00",
+        "angebotsfrist": "2099-09-30T00:00:00",
         "fragenfrist": None,
         "verfahrensart": "Offenes Verfahren",
         "cpv_codes": [],
@@ -54,7 +54,7 @@ def test_veraenderte_frist_wird_als_aktualisierung_erkannt(db, portal):
 
     job2 = queue.enqueue(
         db, "duplicate", portal_id=portal.id,
-        payload={"normalized": _normalized(angebotsfrist="2026-10-15T00:00:00")},
+        payload={"normalized": _normalized(angebotsfrist="2099-10-15T00:00:00")},
     )
     ergebnis2 = run_duplicate(db, job2)
 

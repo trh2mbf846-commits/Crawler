@@ -18,7 +18,7 @@ def _angelegte_ausschreibung(db, portal, **overrides):
         "titel": "KI-Beratung für die Verwaltung",
         "volltext": "Volltext", "kurzbeschreibung": "Kurz",
         "vergabestelle": "Testamt", "ort_region": "Berlin",
-        "veroeffentlichungsdatum": "2026-08-01T00:00:00", "angebotsfrist": "2026-09-30T00:00:00",
+        "veroeffentlichungsdatum": "2026-08-01T00:00:00", "angebotsfrist": "2099-09-30T00:00:00",
         "fragenfrist": None, "verfahrensart": "Offenes Verfahren", "cpv_codes": [],
         "geschaetzter_wert": 100000.0, "dokumente_links": [], "zugangsart": "oeffentlich",
     }
