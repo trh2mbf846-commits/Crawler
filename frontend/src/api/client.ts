@@ -244,6 +244,8 @@ export function fetchFristen(tage = 90): Promise<Frist[]> {
   return request<Frist[]>(`/fristen?tage=${tage}`)
 }
 
+export const SICHERUNG_URL = `${API_BASE_URL}/datenbank-sicherung`
+
 export const FRISTEN_ICS_URL = `${API_BASE_URL}/fristen.ics`
 
 export function fetchReferenzen(): Promise<Referenz[]> {

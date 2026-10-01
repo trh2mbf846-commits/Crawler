@@ -45,9 +45,17 @@ Genau wie bisher (siehe README „Lokal auf dem Mac“): Python 3.11+, Node.js L
 klonen, `Crawler starten.command` doppelklicken. Für Kevin zusätzlich **Ollama** (ollama.com)
 installieren – das Skript lädt das Modell selbst.
 
-### Windows oder Linux (mit Docker)
-Das Doppelklick-Skript gibt es nur für den Mac. Auf Windows/Linux läuft der Crawler am
-einfachsten in **Docker**.
+### Windows (Doppelklick, ohne Docker)
+Wie beim Mac: Python 3.11+, Node.js (LTS) und Git installieren, Repository klonen, dann
+**`Crawler starten.bat`** doppelklicken. Die vollständige Schritt-für-Schritt-Anleitung (auch für
+Kolleg:innen, inkl. Startdatei mit deinen Themen und deinem Profil) steht in
+**[ANLEITUNG-kollegen.md](ANLEITUNG-kollegen.md)**.
+
+> ⚠️ Das Windows-Skript konnte nur auf Syntax, Hilfsfunktionen und im Ablauf unter PowerShell auf
+> Linux geprüft werden, nicht auf einem echten Windows-Rechner.
+
+### Linux (mit Docker)
+Für Linux (oder wenn du Docker bevorzugst) läuft der Crawler in **Docker**.
 
 > ⚠️ Der Docker-Weg ist im Repository vorbereitet (`Dockerfile`), konnte aber in der
 > Entwicklungsumgebung nicht ausprobiert werden. Falls etwas hakt, schick die Fehlermeldung an
@@ -125,9 +133,14 @@ Tablet, Handy – öffnen ihn einfach im Browser. Es gibt nur **eine** Datenbank
 
 ## 5. Weg C – Online (für Zugriff von überall und für andere Personen)
 
-Die Schritt-für-Schritt-Einrichtung bei Render.com steht in der README (Abschnitt „Deployment“)
-und gilt weiterhin: **New → Blueprint → Repository `Crawler`**, dann die Variablen eintragen.
-Zusätzlich zu beachten:
+> **Stand:** Weg C wurde bisher bewusst **nicht** weiterverfolgt (Entscheidung für Variante A:
+> jede Person installiert lokal). Das Repository enthält dafür nur eine einfache Vorbereitung
+> (`render.yaml`, ohne Passwortschutz und ohne dauerhaften Speicher). Ein Online-Betrieb für mehrere
+> Personen braucht zusätzlich Zugangsschutz mit Benutzerkonten, einen dauerhaften Speicher und die
+> richtige Zeitzone – das ist entworfen und lässt sich bei Bedarf in Claude Code übernehmen.
+
+Die einfache Einrichtung bei Render.com steht in der README (Abschnitt „Deployment“). Zusätzlich
+zu beachten:
 
 1. **Erst Passwortschutz, dann Link teilen.** Ein öffentlicher Link ohne Schutz erlaubt jedem,
    Läufe zu starten und Kevins Aktionen auszuführen. Der vorhandene `CRAWLER_API_KEY` ist **kein**

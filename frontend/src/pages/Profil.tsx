@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   ApiError,
+  SICHERUNG_URL,
   fetchAssistantPreferences,
   fetchReferenzen,
   loescheReferenz,
@@ -139,6 +140,21 @@ export function Profil() {
       </section>
 
       <ThemenPanel />
+
+      <section className="rounded-lg border border-line bg-surface p-5 shadow-card">
+        <h2 className="text-sm font-semibold text-ink">Sicherung & Startdatei</h2>
+        <p className="mb-3 mt-0.5 text-xs text-ink-muted">
+          Alle deine Eingaben (Profil, Referenzen, Themen, Merkliste, Checklisten, Suchprofile) und die gesammelten
+          Ausschreibungen liegen in einer Datei. Lade sie als Backup herunter – oder gib sie Kolleg:innen als Startdatei,
+          damit deren Crawler mit deinen Themen und deinem Profil beginnt.
+        </p>
+        <a
+          href={SICHERUNG_URL}
+          className="focus-ring inline-block rounded-md border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-muted hover:bg-surface-sunken hover:text-ink"
+        >
+          💾 Datenbank-Sicherung herunterladen
+        </a>
+      </section>
     </div>
   )
 }

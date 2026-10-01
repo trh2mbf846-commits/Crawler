@@ -16,6 +16,7 @@ from app.api import (
     portals,
     run,
     search_profiles,
+    sicherung,
     tenders,
     themen,
     wuensche,
@@ -73,6 +74,7 @@ app.include_router(assistant.router, prefix="/api", dependencies=_geschuetzt)
 app.include_router(wuensche.router, prefix="/api", dependencies=_geschuetzt)
 app.include_router(bewerbung.router, prefix="/api", dependencies=_geschuetzt)
 app.include_router(themen.router, prefix="/api", dependencies=_geschuetzt)
+app.include_router(sicherung.router, prefix="/api", dependencies=_geschuetzt)
 
 
 @app.get("/api/health")
